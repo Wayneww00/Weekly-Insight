@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Insight Hub</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app-layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">V</span>
+          <span>vantage</span>
+        </div>
+
+        <nav class="issue-nav" aria-label="Insight files">
+          <section>
+            <p class="nav-label">Current</p>
+            <div id="current-list" class="nav-list"></div>
+          </section>
+
+          <section>
+            <p class="nav-label">History</p>
+            <div id="history-list" class="nav-list"></div>
+          </section>
+        </nav>
+
+        <div class="sidebar-upload">
+          <button id="upload-toggle" class="upload-toggle" type="button">
+            <span aria-hidden="true">+</span>
+            上传 PPT/PDF
+          </button>
+
+          <form id="upload-form" class="mini-upload" hidden>
+            <div class="segmented" aria-label="Insight type">
+              <button type="button" class="active" data-insight-type="weekly">Weekly</button>
+              <button type="button" data-insight-type="monthly">Monthly</button>
+            </div>
+
+            <label>
+              日期
+              <input id="issue-date" type="date" required />
+            </label>
+
+            <label>
+              分类
+              <input id="category" value="Market Insight" required />
+            </label>
+
+            <label>
+              摘要
+              <textarea id="summary" rows="2" placeholder="可选"></textarea>
+            </label>
+
+            <label class="file-picker">
+              <span id="file-name">选择文件</span>
+              <input id="file-input" type="file" accept=".ppt,.pptx,.pdf,application/pdf" />
+            </label>
+
+            <p id="generated-title" class="generated-title"></p>
+            <p id="form-error" class="form-error" hidden></p>
+
+            <button class="publish-button" type="submit">发布</button>
+          </form>
+        </div>
+      </aside>
+
+      <section class="viewer">
+        <header class="viewer-header">
+          <div>
+            <div class="viewer-kicker">
+              <span class="status-dot"></span>
+              <span id="viewer-type">Weekly Insight</span>
+            </div>
+            <h1 id="viewer-title">Insight Hub</h1>
+            <p id="viewer-summary">选择左侧文件查看 HTML/PDF 内容。</p>
+          </div>
+        </header>
+
+        <div id="viewer-content" class="viewer-content"></div>
+      </section>
+    </main>
+
+    <script src="./src/app.js"></script>
+  </body>
+</html>
