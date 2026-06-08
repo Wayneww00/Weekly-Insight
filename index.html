@@ -4,78 +4,98 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Insight Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
     <main class="app-layout">
-      <aside class="sidebar">
+      <!-- Mobile header: only visible on small screens -->
+      <header class="mobile-header">
         <div class="brand">
           <span class="brand-mark">V</span>
           <span>vantage</span>
         </div>
+        <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="打开菜单">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M2.5 5h15M2.5 10h15M2.5 15h15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </button>
+      </header>
 
-        <nav class="issue-nav" aria-label="Insight files">
-          <section>
-            <p class="nav-label">Current</p>
-            <div id="current-list" class="nav-list"></div>
-          </section>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-scroll">
+          <div class="brand desktop-only">
+            <span class="brand-mark">V</span>
+            <span>vantage</span>
+          </div>
 
-          <section>
-            <p class="nav-label">History</p>
-            <div id="history-list" class="nav-list"></div>
-          </section>
-        </nav>
+          <!-- Search -->
+          <div class="search-box">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5" />
+              <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+            <input id="search-input" type="search" placeholder="搜索标题、分类、摘要…" />
+          </div>
 
+          <!-- Filters -->
+          <div class="filter-bar">
+            <select id="filter-type">
+              <option value="">全部类型</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+
+          </div>
+
+          <nav class="issue-nav" aria-label="Insight files">
+            <section>
+              <p class="nav-label">最新一期</p>
+              <div id="current-list" class="nav-list"></div>
+            </section>
+
+            <section>
+              <p class="nav-label">历史归档</p>
+              <div id="history-list" class="nav-list"></div>
+            </section>
+          </nav>
+        </div>
+
+        <!-- Upload -->
         <div class="sidebar-upload">
-          <button id="upload-toggle" class="upload-toggle" type="button">
-            <span aria-hidden="true">+</span>
-            上传 PPT/PDF
-          </button>
-
-          <form id="upload-form" class="mini-upload" hidden>
-            <div class="segmented" aria-label="Insight type">
-              <button type="button" class="active" data-insight-type="weekly">Weekly</button>
-              <button type="button" data-insight-type="monthly">Monthly</button>
-            </div>
-
-            <label>
-              日期
-              <input id="issue-date" type="date" required />
-            </label>
-
-            <label>
-              分类
-              <input id="category" value="Market Insight" required />
-            </label>
-
-            <label>
-              摘要
-              <textarea id="summary" rows="2" placeholder="可选"></textarea>
-            </label>
-
-            <label class="file-picker">
-              <span id="file-name">选择文件</span>
-              <input id="file-input" type="file" accept=".ppt,.pptx,.pdf,application/pdf" />
-            </label>
-
-            <p id="generated-title" class="generated-title"></p>
-            <p id="form-error" class="form-error" hidden></p>
-
-            <button class="publish-button" type="submit">发布</button>
-          </form>
+          <div id="dropzone" class="dropzone">
+            <input id="file-input" type="file" accept=".ppt,.pptx,.pdf,application/pdf" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span class="dropzone-label">上传 PPT / PDF</span>
+            <span class="dropzone-hint">点击选择或拖拽文件到此处</span>
+          </div>
+          <p id="upload-status" class="upload-status" hidden></p>
         </div>
       </aside>
 
+      <!-- Overlay for mobile sidebar -->
+      <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
       <section class="viewer">
         <header class="viewer-header">
-          <div>
+          <div class="viewer-header-main">
             <div class="viewer-kicker">
               <span class="status-dot"></span>
               <span id="viewer-type">Weekly Insight</span>
             </div>
             <h1 id="viewer-title">Insight Hub</h1>
-            <p id="viewer-summary">选择左侧文件查看 HTML/PDF 内容。</p>
+            <p id="viewer-summary">选择左侧文件查看内容。</p>
           </div>
+          <div class="viewer-header-meta" id="viewer-meta"></div>
         </header>
 
         <div id="viewer-content" class="viewer-content"></div>

@@ -1,3 +1,7 @@
+/* ============================================
+   Insight Hub — App Logic
+   ============================================ */
+
 const STORAGE_KEY = "insight-hub:issues";
 const DB_NAME = "insight-hub";
 const STORE_NAME = "files";
@@ -57,6 +61,9 @@ const state = {
   insightType: "weekly",
   file: null,
   objectUrl: null,
+  searchQuery: "",
+  filterType: "",
+
 };
 
 const els = {
@@ -65,48 +72,80 @@ const els = {
   viewerType: document.querySelector("#viewer-type"),
   viewerTitle: document.querySelector("#viewer-title"),
   viewerSummary: document.querySelector("#viewer-summary"),
+  viewerMeta: document.querySelector("#viewer-meta"),
   viewerContent: document.querySelector("#viewer-content"),
-  uploadToggle: document.querySelector("#upload-toggle"),
-  uploadForm: document.querySelector("#upload-form"),
-  issueDate: document.querySelector("#issue-date"),
-  category: document.querySelector("#category"),
-  summary: document.querySelector("#summary"),
+  dropzone: document.querySelector("#dropzone"),
   fileInput: document.querySelector("#file-input"),
-  fileName: document.querySelector("#file-name"),
-  generatedTitle: document.querySelector("#generated-title"),
-  formError: document.querySelector("#form-error"),
+  uploadStatus: document.querySelector("#upload-status"),
+  searchInput: document.querySelector("#search-input"),
+  filterType: document.querySelector("#filter-type"),
+
+  sidebar: document.querySelector("#sidebar"),
+  sidebarToggle: document.querySelector("#sidebar-toggle"),
+  sidebarOverlay: document.querySelector("#sidebar-overlay"),
 };
 
 initialize();
 
+/* ============================================
+   Init & Events
+   ============================================ */
+
 function initialize() {
   state.selectedIssueId = latestIssue()?.id || state.issues[0]?.id || null;
-  els.issueDate.value = new Date().toISOString().slice(0, 10);
   bindEvents();
   render();
 }
 
 function bindEvents() {
-  els.uploadToggle.addEventListener("click", () => {
-    els.uploadForm.hidden = !els.uploadForm.hidden;
-  });
-
-  document.querySelectorAll("[data-insight-type]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.insightType = button.dataset.insightType;
-      document.querySelectorAll("[data-insight-type]").forEach((item) => item.classList.remove("active"));
-      button.classList.add("active");
-      renderGeneratedTitle();
-    });
-  });
-
-  els.issueDate.addEventListener("change", renderGeneratedTitle);
+  // Dropzone: click to select file
   els.fileInput.addEventListener("change", (event) => {
-    state.file = event.target.files?.[0] || null;
-    els.fileName.textContent = state.file ? state.file.name : "选择文件";
+    const file = event.target.files?.[0] || null;
+    if (file) handleUpload(file);
   });
-  els.uploadForm.addEventListener("submit", handleUpload);
+
+  // Dropzone: drag & drop
+  els.dropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    els.dropzone.classList.add("dragover");
+  });
+  els.dropzone.addEventListener("dragleave", () => {
+    els.dropzone.classList.remove("dragover");
+  });
+  els.dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    els.dropzone.classList.remove("dragover");
+    const file = e.dataTransfer.files?.[0] || null;
+    if (file) handleUpload(file);
+  });
+
+  // Search & filters
+  els.searchInput.addEventListener("input", (e) => {
+    state.searchQuery = e.target.value.trim().toLowerCase();
+    renderSidebar();
+  });
+  els.filterType.addEventListener("change", (e) => {
+    state.filterType = e.target.value;
+    renderSidebar();
+  });
+
+
+  // Mobile sidebar
+  els.sidebarToggle.addEventListener("click", () => {
+    els.sidebar.classList.add("open");
+    els.sidebarOverlay.classList.add("active");
+  });
+  els.sidebarOverlay.addEventListener("click", closeSidebar);
 }
+
+function closeSidebar() {
+  els.sidebar.classList.remove("open");
+  els.sidebarOverlay.classList.remove("active");
+}
+
+/* ============================================
+   Persistence
+   ============================================ */
 
 function loadIssues() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -114,7 +153,6 @@ function loadIssues() {
     saveIssues(sampleIssues);
     return sampleIssues;
   }
-
   try {
     return sortIssues(JSON.parse(raw));
   } catch {
@@ -171,6 +209,10 @@ function getIssueFile(issueId) {
   return withStore("readonly", (store) => store.get(issueId)).then((result) => result?.file || null);
 }
 
+/* ============================================
+   Queries
+   ============================================ */
+
 function latestIssue() {
   return state.issues.find((issue) => issue.isLatest) || state.issues[0] || null;
 }
@@ -179,25 +221,51 @@ function selectedIssue() {
   return state.issues.find((issue) => issue.id === state.selectedIssueId) || latestIssue();
 }
 
+function getFilteredIssues() {
+  let result = state.issues;
+
+  // Search
+  if (state.searchQuery) {
+    const q = state.searchQuery;
+    result = result.filter(
+      (issue) =>
+        issue.title.toLowerCase().includes(q) ||
+        issue.category.toLowerCase().includes(q) ||
+        (issue.summary && issue.summary.toLowerCase().includes(q)) ||
+        issue.tags.some((tag) => tag.toLowerCase().includes(q))
+    );
+  }
+
+  // Type filter
+  if (state.filterType) {
+    result = result.filter((issue) => issue.insightType === state.filterType);
+  }
+
+  return result;
+}
+
 function generateIssueTitle(issueDate, insightType) {
   if (!issueDate) return insightType === "weekly" ? "Weekly Insights" : "Monthly Insights";
   if (insightType === "monthly") return `${issueDate.slice(0, 7)} Monthly Insights`;
   return `${issueDate} Weekly Insights`;
 }
 
+/* ============================================
+   Render
+   ============================================ */
+
 function render() {
-  renderGeneratedTitle();
   renderSidebar();
   renderViewer();
 }
 
-function renderGeneratedTitle() {
-  els.generatedTitle.textContent = generateIssueTitle(els.issueDate.value, state.insightType);
-}
+
 
 function renderSidebar() {
-  const current = latestIssue();
-  const history = state.issues.filter((issue) => issue.id !== current?.id);
+  const filtered = getFilteredIssues();
+  const current = filtered.find((issue) => issue.isLatest) || filtered[0] || null;
+  const history = filtered.filter((issue) => issue.id !== current?.id);
+
   els.currentList.innerHTML = current ? renderNavItem(current) : `<p class="empty-nav">暂无当前文件</p>`;
   els.historyList.innerHTML = history.length
     ? history.map(renderNavItem).join("")
@@ -206,6 +274,7 @@ function renderSidebar() {
   document.querySelectorAll("[data-issue-id]").forEach((item) => {
     item.addEventListener("click", () => {
       state.selectedIssueId = item.dataset.issueId;
+      closeSidebar();
       renderSidebar();
       renderViewer();
     });
@@ -220,7 +289,7 @@ function renderNavItem(issue) {
       <span class="nav-icon">${issue.isLatest ? "●" : "□"}</span>
       <span>
         <strong>${escapeHtml(issue.title)}</strong>
-        <small>${type} · ${escapeHtml(issue.category)}</small>
+        <small>${type}</small>
       </span>
     </button>
   `;
@@ -234,198 +303,160 @@ async function renderViewer() {
 
   const issue = selectedIssue();
   if (!issue) {
+    els.viewerType.textContent = "Insight Hub";
     els.viewerTitle.textContent = "Insight Hub";
-    els.viewerSummary.textContent = "选择左侧文件查看 HTML/PDF 内容。";
+    els.viewerSummary.textContent = "选择左侧文件查看内容。";
+    els.viewerMeta.innerHTML = "";
     els.viewerContent.innerHTML = `<div class="empty-viewer">暂无内容</div>`;
     return;
   }
 
+  // Header
   els.viewerType.textContent = issue.insightType === "weekly" ? "Weekly Insight" : "Monthly Insight";
   els.viewerTitle.textContent = issue.category;
   els.viewerSummary.textContent = issue.summary || issue.title;
 
+  const fileSizeText = formatFileSize(issue.fileSize);
+  const fileExt = issue.fileName.split(".").pop()?.toUpperCase() || "FILE";
+  els.viewerMeta.innerHTML = `
+    <span class="meta-tag">${escapeHtml(fileExt)}</span>
+    <span class="meta-tag">${fileSizeText}</span>
+  `;
+
+  // Content
   const file = await getIssueFile(issue.id);
-  els.viewerContent.innerHTML = renderHtmlDeck(issue, Boolean(file));
+  els.viewerContent.innerHTML = renderPreview(issue, file);
+
+  // Wire download
+  const downloadBtn = document.querySelector("#download-btn");
+  if (downloadBtn && file) {
+    const url = URL.createObjectURL(file);
+    state.objectUrl = url;
+    downloadBtn.href = url;
+    downloadBtn.download = issue.fileName;
+  }
 }
 
-function renderHtmlDeck(issue, hasStoredFile) {
-  const fileNote = hasStoredFile
-    ? `<a class="deck-download" href="#" id="download-link">下载原文件</a>`
-    : `<span class="deck-note">示例文件暂无本地原件</span>`;
+function renderPreview(issue, file) {
+  const isPdf = issue.fileType === "application/pdf" || issue.fileName.toLowerCase().endsWith(".pdf");
+  const isSample = !file;
+  const fileSizeText = formatFileSize(issue.fileSize);
+  const fileExt = issue.fileName.split(".").pop()?.toUpperCase() || "FILE";
 
-  setTimeout(() => wireDownloadLink(issue), 0);
+  if (file && isPdf) {
+    // Real PDF with blob — embed it
+    const url = URL.createObjectURL(file);
+    state.objectUrl = url;
+    return `
+      <div class="preview-shell">
+        <div class="preview-toolbar">
+          <div class="preview-toolbar-info">
+            <span class="file-type-badge">PDF</span>
+            <strong>${escapeHtml(issue.fileName)}</strong>
+            <span>${fileSizeText}</span>
+          </div>
+          <div class="preview-actions">
+            <a id="download-btn" class="btn btn-primary" href="${url}" download="${escapeHtml(issue.fileName)}">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M7 1v8m0 0l-3-3m3 3l3-3M1 10v2.5a1 1 0 001 1h10a1 1 0 001-1V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              下载原文件
+            </a>
+          </div>
+        </div>
+        <div class="preview-stage">
+          <embed class="pdf-embed" src="${url}" type="application/pdf" />
+        </div>
+      </div>
+    `;
+  }
+
+  // PPT or no real file — show honest fallback
+  let fallbackBody = "";
+  if (file) {
+    // Real file but not PDF (e.g. PPT)
+    const url = URL.createObjectURL(file);
+    state.objectUrl = url;
+    fallbackBody = `
+      <p>当前版本暂不支持 PPT 在线预览，请下载原文件查看。</p>
+      <div class="file-meta">
+        <span>${escapeHtml(issue.fileName)}</span>
+        <span>${fileSizeText}</span>
+      </div>
+      <a id="download-btn" class="btn btn-primary" href="${url}" download="${escapeHtml(issue.fileName)}">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M7 1v8m0 0l-3-3m3 3l3-3M1 10v2.5a1 1 0 001 1h10a1 1 0 001-1V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        下载原文件
+      </a>
+    `;
+  } else {
+    // Sample/demo file with no blob
+    fallbackBody = `
+      <p>这是演示数据，尚未上传真实文件。</p>
+      <div class="file-meta">
+        <span>${escapeHtml(issue.fileName)}</span>
+        <span>${fileSizeText}</span>
+      </div>
+      <span class="btn" style="opacity:0.5;cursor:default;">下载原文件</span>
+    `;
+  }
 
   return `
-    <div class="deck-shell">
-      <div class="deck-meta">
-        <div>
-          <strong>${escapeHtml(issue.title)}</strong>
-          <span>PPT HTML View · ${escapeHtml(issue.fileName)}</span>
+    <div class="preview-shell">
+      ${isSample ? `
+        <div class="sample-notice">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M7 1.5l5.5 10H1.5L7 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M7 5.5v3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="7" cy="10" r="0.5" fill="currentColor"/>
+          </svg>
+          演示文件 · 尚未上传真实文件
         </div>
-        ${fileNote}
-      </div>
-
-      <div class="slide-stage">
-        ${renderSlideCover(issue)}
-        ${renderSlideOpportunity(issue)}
-        ${renderSlideSummary(issue)}
+      ` : ""}
+      <div class="preview-stage">
+        <div class="fallback-card">
+          <div class="file-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <h3>${escapeHtml(issue.title)}</h3>
+          ${fallbackBody}
+        </div>
       </div>
     </div>
   `;
 }
 
-function renderSlideCover(issue) {
-  const period = issue.insightType === "monthly" ? issue.issueDate.slice(0, 7) : issue.issueDate;
-  return `
-    <section class="html-slide cover-slide">
-      <div class="slide-topline">
-        <span>${issue.insightType === "monthly" ? "Monthly Insight" : "Weekly Insight"}</span>
-        <span>${escapeHtml(period)}</span>
-      </div>
-      <div class="slide-cover-grid">
-        <div>
-          <p class="slide-label">Insight Report</p>
-          <h2>${escapeHtml(issue.title)}</h2>
-          <p>${escapeHtml(issue.summary || "本期汇总核心市场信号、行业变化和需要关注的机会窗口。")}</p>
-        </div>
-        <div class="slide-visual">
-          <span>Global</span>
-          <strong>${escapeHtml(issue.category)}</strong>
-          <small>HTML version converted from PPT</small>
-        </div>
-      </div>
-    </section>
-  `;
-}
-
-function renderSlideOpportunity(issue) {
-  const chips = issue.tags.length ? issue.tags : ["Crypto 行业", "市场动态", "中影响"];
-  return `
-    <section class="html-slide content-slide">
-      <div class="slide-topline">
-        <span>${escapeHtml(issue.category)}</span>
-        <span>01 / Market Signal</span>
-      </div>
-      <h2>现货比特币 ETF 延续负面趋势，五月份资金流出 24 亿美元</h2>
-      <p class="slide-lead">
-        分析师表示，对宏观经济环境改善的希望减弱，导致机构投资者从加密货币 ETF 转向人工智能股票。
-      </p>
-      <div class="slide-body-grid">
-        <div class="slide-points">
-          <div><strong>资金流向</strong><span>五月份 ETF 资金流出扩大，风险资产偏好下降。</span></div>
-          <div><strong>影响判断</strong><span>短期价格波动加剧，机构配置节奏放缓。</span></div>
-          <div><strong>观察窗口</strong><span>关注下周宏观数据与主要发行商申赎变化。</span></div>
-        </div>
-        <div class="slide-chart">
-          <i style="height: 46%"></i>
-          <i style="height: 72%"></i>
-          <i style="height: 38%"></i>
-          <i style="height: 58%"></i>
-          <i style="height: 30%"></i>
-        </div>
-      </div>
-      <div class="chips">${chips.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
-    </section>
-  `;
-}
-
-function renderSlideSummary(issue) {
-  return `
-    <section class="html-slide content-slide summary-slide">
-      <div class="slide-topline">
-        <span>${escapeHtml(issue.category)}</span>
-        <span>02 / Executive View</span>
-      </div>
-      <h2>本期结论</h2>
-      <div class="summary-grid">
-        <article>
-          <strong>机会</strong>
-          <p>市场波动带来重新定价窗口，适合跟踪资金回流信号和政策变化。</p>
-        </article>
-        <article>
-          <strong>风险</strong>
-          <p>宏观预期和机构资金撤出仍可能压制短期情绪。</p>
-        </article>
-        <article>
-          <strong>行动</strong>
-          <p>下期重点补充 ETF 流向、竞品动作和区域市场事件。</p>
-        </article>
-      </div>
-      <footer>Source: converted PPT HTML · ${escapeHtml(issue.fileName)}</footer>
-    </section>
-  `;
-}
-
-async function wireDownloadLink(issue) {
-  const link = document.querySelector("#download-link");
-  if (!link) return;
-  const file = await getIssueFile(issue.id);
-  if (!file) return;
-  const url = URL.createObjectURL(file);
-  link.href = url;
-  link.download = issue.fileName;
-}
-
-async function handleUpload(event) {
-  event.preventDefault();
-  setError("");
-
-  const file = state.file;
-  if (!file) {
-    setError("请选择 PPT、PPTX 或 PDF。");
-    return;
-  }
-
-  if (!isAcceptedFile(file)) {
-    setError("仅支持 .ppt、.pptx、.pdf。");
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const issue = {
-    id: crypto.randomUUID(),
-    title: generateIssueTitle(els.issueDate.value, state.insightType),
-    insightType: state.insightType,
-    issueDate: els.issueDate.value,
-    category: els.category.value.trim() || "Market Insight",
-    summary: els.summary.value.trim(),
-    tags: [],
-    fileName: file.name,
-    fileType: file.type || file.name.split(".").pop() || "unknown",
-    fileSize: file.size,
-    createdAt: now,
-    updatedAt: now,
-    isLatest: true,
-  };
-
-  try {
-    await saveIssueFile(issue.id, file);
-    state.issues = sortIssues([issue, ...state.issues.map((item) => ({ ...item, isLatest: false }))]);
-    state.selectedIssueId = issue.id;
-    saveIssues(state.issues);
-    resetUploadForm();
-    render();
-  } catch {
-    setError("文件保存失败，请重试。");
-  }
-}
-
-function resetUploadForm() {
-  state.file = null;
-  els.fileInput.value = "";
-  els.fileName.textContent = "选择文件";
-  els.summary.value = "";
-  els.uploadForm.hidden = true;
-}
+/* ============================================
+   Upload
+   ============================================ */
 
 function isAcceptedFile(file) {
   const lowerName = file.name.toLowerCase();
   return lowerName.endsWith(".ppt") || lowerName.endsWith(".pptx") || lowerName.endsWith(".pdf");
 }
 
-function setError(message) {
-  els.formError.textContent = message;
-  els.formError.hidden = !message;
+function setUploadStatus(message) {
+  els.uploadStatus.textContent = message;
+  els.uploadStatus.hidden = !message;
+}
+
+/* ============================================
+   Utils
+   ============================================ */
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
 function escapeHtml(value) {
