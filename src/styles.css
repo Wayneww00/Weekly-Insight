@@ -1,7 +1,7 @@
 /* ============================================
    Insight Hub — Design System
-   Typography: Newsreader (display) + DM Sans (body)
-   Philosophy: quiet authority, editorial density
+   Typography: DM Sans
+   Philosophy: quiet, utilitarian, readable
    ============================================ */
 
 :root {
@@ -663,10 +663,9 @@ body {
 
 .viewer h1 {
   margin: 0 0 2px;
-  font-family: "Newsreader", serif;
   font-size: 24px;
-  font-weight: 400;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: 0;
   line-height: 1.08;
   color: var(--ink-100);
 }
@@ -1086,9 +1085,8 @@ body {
 
 .fallback-card h3 {
   margin: 0 0 var(--space-sm);
-  font-family: "Newsreader", serif;
   font-size: 22px;
-  font-weight: 400;
+  font-weight: 600;
   color: var(--ink-100);
 }
 
