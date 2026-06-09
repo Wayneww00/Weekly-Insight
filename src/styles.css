@@ -79,7 +79,7 @@ body {
 
 .app-layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100dvh;
 }
 
@@ -125,7 +125,7 @@ body {
 
 .sidebar-scroll {
   overflow-y: auto;
-  padding: var(--space-xl);
+  padding: 18px;
 }
 
 .sidebar-overlay {
@@ -149,7 +149,7 @@ body {
 
 .brand img {
   display: block;
-  width: 136px;
+  width: 124px;
   height: auto;
 }
 
@@ -349,7 +349,7 @@ body {
    ============================================ */
 
 .sidebar-actions {
-  padding: var(--space-lg);
+  padding: var(--space-md);
   border-top: 1px solid var(--border-subtle);
 }
 
