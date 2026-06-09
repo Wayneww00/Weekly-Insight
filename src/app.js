@@ -398,8 +398,8 @@ function renderViewerMeta(issue, downloadUrl) {
 
 function bindPreviewActions() {
   const fullscreenButton = document.querySelector("[data-preview-fullscreen]");
-  if (!fullscreenButton) return;
-  fullscreenButton.addEventListener("click", () => {
+  const exitFullscreenButton = document.querySelector("[data-exit-fullscreen]");
+  fullscreenButton?.addEventListener("click", () => {
     const previewShell = document.querySelector(".preview-shell");
     if (!previewShell) return;
 
@@ -409,6 +409,9 @@ function bindPreviewActions() {
     }
 
     previewShell.requestFullscreen?.();
+  });
+  exitFullscreenButton?.addEventListener("click", () => {
+    document.exitFullscreen?.();
   });
 }
 
@@ -422,6 +425,12 @@ function renderPreview(issue, file, fileUrl = "") {
     const url = issue.previewUrl || fileUrl;
     return `
       <div class="preview-shell">
+        <button class="fullscreen-exit" type="button" data-exit-fullscreen aria-label="退出全屏">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M5 1v4H1M9 1v4h4M5 13V9H1M13 9H9v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          退出全屏
+        </button>
         <div class="preview-stage">
           <embed class="pdf-embed" src="${url}" type="application/pdf" />
         </div>

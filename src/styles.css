@@ -619,6 +619,7 @@ body {
    ============================================ */
 
 .preview-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -637,6 +638,36 @@ body {
   min-height: 100vh;
   border: 0;
   border-radius: 0;
+}
+
+.fullscreen-exit {
+  display: none;
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 20;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  background: rgba(14, 17, 24, 0.9);
+  color: var(--ink-100);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+}
+
+.fullscreen-exit:hover {
+  border-color: var(--ink-500);
+  background: var(--bg-hover);
+}
+
+.preview-shell:fullscreen .fullscreen-exit {
+  display: inline-flex;
 }
 
 .file-type-badge {

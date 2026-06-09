@@ -165,6 +165,7 @@ test("renders converted ppt preview when a pdf preview url exists", () => {
   assert.equal(meta.includes("PPTX→PDF"), true);
   assert.equal(meta.includes("data-preview-fullscreen"), true);
   assert.equal(meta.includes("meta-download"), true);
+  assert.equal(html.includes("data-exit-fullscreen"), true);
   assert.equal(html.includes("preview-toolbar"), false);
   assert.equal(html.includes("weekly.pdf"), true);
 });
