@@ -96,6 +96,9 @@ globalThis.__appTest = {
   state,
   getFilteredIssues,
   generateIssueTitle,
+  getIssueDisplayTitle,
+  getIssueDisplayMeta,
+  renderViewerSummary,
   renderViewerMeta,
   renderPreview,
   bindSlideReader,
@@ -155,18 +158,27 @@ test("renders converted ppt preview when a pdf preview url exists", () => {
   const issue = {
     title: "2026-06-09 Weekly Insights",
     fileName: "weekly.pptx",
+    insightType: "weekly",
+    issueDate: "2026-06-09",
     fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     fileSize: 2048,
     previewUrl: "/data/uploads/issue-1/weekly.pdf",
     originalUrl: "/data/uploads/issue-1/weekly.pptx",
   };
   const meta = app.renderViewerMeta(issue, issue.originalUrl);
+  const summary = app.renderViewerSummary(issue);
   const html = app.renderPreview(issue, null);
 
-  assert.equal(meta.includes("PPTX→PDF"), true);
+  assert.equal(app.getIssueDisplayTitle(issue), "weekly");
+  assert.equal(app.getIssueDisplayMeta(issue), "2026-06-09 · Weekly Insight");
+  assert.equal(summary, "2026-06-09 · Weekly Insight");
+  assert.equal(summary.includes("已转 PDF"), false);
+  assert.equal(summary.includes("2 KB"), false);
+  assert.equal(meta.includes("PPTX"), false);
+  assert.equal(meta.includes("2 KB"), false);
   assert.equal(meta.includes("data-preview-fullscreen"), true);
   assert.equal(meta.includes("meta-download"), true);
-  assert.equal(html.includes("data-exit-fullscreen"), true);
+  assert.equal(html.includes("data-exit-fullscreen"), false);
   assert.equal(html.includes("preview-toolbar"), false);
   assert.equal(html.includes("weekly.pdf"), true);
 });

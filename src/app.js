@@ -367,17 +367,12 @@ function renderHistoryGroups(issues) {
 
 function renderNavItem(issue) {
   const selected = selectedIssue()?.id === issue.id ? "active" : "";
-  const type = issue.insightType === "weekly" ? "Weekly" : "Monthly";
   const status = getIssuePreviewStatus(issue);
   return `
     <button class="nav-item ${selected}" type="button" data-issue-id="${issue.id}">
-      <span class="nav-date">
-        <strong>${escapeHtml(formatIssueDay(issue.issueDate))}</strong>
-        <small>${escapeHtml(type.slice(0, 1))}</small>
-      </span>
       <span>
-        <strong>${escapeHtml(issue.title)}</strong>
-        <small>${escapeHtml(issue.fileName || type)}</small>
+        <strong>${escapeHtml(getIssueDisplayTitle(issue))}</strong>
+        <small>${escapeHtml(getIssueDisplayMeta(issue))}</small>
         <span class="nav-status ${status.className}">${escapeHtml(status.label)}</span>
       </span>
     </button>
@@ -402,8 +397,8 @@ async function renderViewer() {
 
   // Header
   els.viewerType.textContent = issue.insightType === "weekly" ? "Weekly Insight" : "Monthly Insight";
-  els.viewerTitle.textContent = issue.title;
-  els.viewerSummary.textContent = issue.summary || issue.fileName;
+  els.viewerTitle.textContent = getIssueDisplayTitle(issue);
+  els.viewerSummary.textContent = renderViewerSummary(issue);
 
   // Content
   const file = await getIssueFile(issue.id);
@@ -418,9 +413,7 @@ async function renderViewer() {
 }
 
 function renderViewerMeta(issue, downloadUrl) {
-  const fileSizeText = formatFileSize(issue.fileSize);
-  const fileExt = issue.fileName.split(".").pop()?.toUpperCase() || "FILE";
-  const previewLabel = issue.previewUrl && fileExt !== "PDF" ? `${fileExt}→PDF` : fileExt;
+  const fileExt = getFileExtension(issue);
   const canFullscreen = Boolean(issue.previewUrl || fileExt === "PDF");
   const fullscreenAction = canFullscreen
     ? `
@@ -444,16 +437,31 @@ function renderViewerMeta(issue, downloadUrl) {
     : "";
 
   return `
-    <span class="meta-tag">${escapeHtml(previewLabel)}</span>
-    <span class="meta-tag">${fileSizeText}</span>
     ${fullscreenAction}
     ${downloadAction}
   `;
 }
 
+function renderViewerSummary(issue) {
+  return getIssueDisplayMeta(issue);
+}
+
+function getFileExtension(issue) {
+  return issue.fileName?.split(".").pop()?.toUpperCase() || "FILE";
+}
+
+function getIssueDisplayTitle(issue) {
+  const fileName = issue.fileName || issue.title || "未命名文件";
+  return fileName.replace(/\.[^/.]+$/, "");
+}
+
+function getIssueDisplayMeta(issue) {
+  const type = issue.insightType === "monthly" ? "Monthly Insight" : "Weekly Insight";
+  return issue.issueDate ? `${issue.issueDate} · ${type}` : type;
+}
+
 function bindPreviewActions() {
   const fullscreenButton = document.querySelector("[data-preview-fullscreen]");
-  const exitFullscreenButton = document.querySelector("[data-exit-fullscreen]");
   const slideReader = document.querySelector("[data-slide-reader]");
   fullscreenButton?.addEventListener("click", () => {
     const previewShell = document.querySelector(".preview-shell");
@@ -465,9 +473,6 @@ function bindPreviewActions() {
     }
 
     previewShell.requestFullscreen?.();
-  });
-  exitFullscreenButton?.addEventListener("click", () => {
-    document.exitFullscreen?.();
   });
   bindSlideReader(slideReader);
 }
@@ -482,12 +487,6 @@ function renderPreview(issue, file, fileUrl = "") {
   if (pageUrls.length) {
     return `
       <div class="preview-shell">
-        <button class="fullscreen-exit" type="button" data-exit-fullscreen aria-label="退出全屏">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path d="M5 1v4H1M9 1v4h4M5 13V9H1M13 9H9v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          退出全屏
-        </button>
         <div class="slide-reader" data-slide-reader data-current-slide="0" data-pages='${escapeHtml(JSON.stringify(pageUrls))}' tabindex="0">
           <div class="slide-edge-zone" aria-hidden="true"></div>
           <button class="thumbnail-toggle" type="button" data-toggle-thumbnails aria-label="隐藏缩略图">
@@ -536,12 +535,6 @@ function renderPreview(issue, file, fileUrl = "") {
     const url = issue.previewUrl || fileUrl;
     return `
       <div class="preview-shell">
-        <button class="fullscreen-exit" type="button" data-exit-fullscreen aria-label="退出全屏">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path d="M5 1v4H1M9 1v4h4M5 13V9H1M13 9H9v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          退出全屏
-        </button>
         <div class="preview-stage">
           <embed class="pdf-embed" src="${url}" type="application/pdf" />
         </div>
@@ -831,13 +824,6 @@ function formatMonthLabel(monthKey) {
   if (!/^\d{4}-\d{2}$/.test(monthKey)) return monthKey;
   const [year, month] = monthKey.split("-");
   return `${year} 年 ${Number(month)} 月`;
-}
-
-function formatIssueDay(issueDate) {
-  if (!issueDate) return "--";
-  const parts = issueDate.split("-");
-  if (parts.length < 3) return issueDate;
-  return `${Number(parts[1])}/${Number(parts[2])}`;
 }
 
 function getIssuePreviewStatus(issue) {
