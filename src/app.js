@@ -98,6 +98,15 @@ function initialize() {
 }
 
 function bindEvents() {
+  // Upload type tabs
+  document.querySelectorAll("[data-insight-type]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.insightType = button.dataset.insightType;
+      document.querySelectorAll("[data-insight-type]").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+    });
+  });
+
   // Dropzone: click to select file
   els.fileInput.addEventListener("change", (event) => {
     const file = event.target.files?.[0] || null;
@@ -227,13 +236,7 @@ function getFilteredIssues() {
   // Search
   if (state.searchQuery) {
     const q = state.searchQuery;
-    result = result.filter(
-      (issue) =>
-        issue.title.toLowerCase().includes(q) ||
-        issue.category.toLowerCase().includes(q) ||
-        (issue.summary && issue.summary.toLowerCase().includes(q)) ||
-        issue.tags.some((tag) => tag.toLowerCase().includes(q))
-    );
+    result = result.filter((issue) => issue.title.toLowerCase().includes(q));
   }
 
   // Type filter
@@ -313,8 +316,8 @@ async function renderViewer() {
 
   // Header
   els.viewerType.textContent = issue.insightType === "weekly" ? "Weekly Insight" : "Monthly Insight";
-  els.viewerTitle.textContent = issue.category;
-  els.viewerSummary.textContent = issue.summary || issue.title;
+  els.viewerTitle.textContent = issue.title;
+  els.viewerSummary.textContent = issue.summary || issue.fileName;
 
   const fileSizeText = formatFileSize(issue.fileSize);
   const fileExt = issue.fileName.split(".").pop()?.toUpperCase() || "FILE";

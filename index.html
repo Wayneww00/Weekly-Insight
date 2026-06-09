@@ -40,7 +40,7 @@
               <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5" />
               <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
             </svg>
-            <input id="search-input" type="search" placeholder="搜索标题、分类、摘要…" />
+            <input id="search-input" type="search" placeholder="搜索标题…" />
           </div>
 
           <!-- Filters -->
@@ -68,6 +68,10 @@
 
         <!-- Upload -->
         <div class="sidebar-upload">
+          <div class="upload-type-tabs" aria-label="上传类型">
+            <button type="button" class="active" data-insight-type="weekly">Weekly</button>
+            <button type="button" data-insight-type="monthly">Monthly</button>
+          </div>
           <div id="dropzone" class="dropzone">
             <input id="file-input" type="file" accept=".ppt,.pptx,.pdf,application/pdf" />
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
