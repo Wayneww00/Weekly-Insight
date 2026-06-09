@@ -63,6 +63,7 @@ const state = {
   objectUrl: null,
   searchQuery: "",
   filterType: "",
+  uploadDialogOpen: false,
 
 };
 
@@ -80,7 +81,11 @@ const els = {
   issueDate: document.querySelector("#issue-date"),
   markLatest: document.querySelector("#mark-latest"),
   searchInput: document.querySelector("#search-input"),
-  filterType: document.querySelector("#filter-type"),
+  filterButtons: document.querySelectorAll("[data-filter-type]"),
+  openUpload: document.querySelector("#open-upload"),
+  closeUpload: document.querySelector("[data-close-upload]"),
+  uploadDialog: document.querySelector("#upload-dialog"),
+  sidebarStatus: document.querySelector("#sidebar-status"),
 
   sidebar: document.querySelector("#sidebar"),
   sidebarToggle: document.querySelector("#sidebar-toggle"),
@@ -136,11 +141,31 @@ function bindEvents() {
     state.searchQuery = e.target.value.trim().toLowerCase();
     renderSidebar();
   });
-  els.filterType.addEventListener("change", (e) => {
-    state.filterType = e.target.value;
-    renderSidebar();
+  els.filterButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.filterType = button.dataset.filterType || "";
+      els.filterButtons.forEach((item) => item.classList.toggle("active", item === button));
+      renderSidebar();
+    });
   });
 
+  // Upload dialog
+  els.openUpload.addEventListener("click", () => {
+    els.uploadDialog.showModal?.();
+    state.uploadDialogOpen = true;
+  });
+  els.closeUpload.addEventListener("click", closeUploadDialog);
+  els.uploadDialog.addEventListener("click", (event) => {
+    if (event.target === els.uploadDialog) closeUploadDialog();
+  });
+  els.uploadDialog.addEventListener("close", () => {
+    state.uploadDialogOpen = false;
+  });
+
+  // Sync initial filter active state
+  els.filterButtons.forEach((button) => {
+    button.classList.toggle("active", (button.dataset.filterType || "") === state.filterType);
+  });
 
   // Mobile sidebar
   els.sidebarToggle.addEventListener("click", () => {
@@ -148,6 +173,11 @@ function bindEvents() {
     els.sidebarOverlay.classList.add("active");
   });
   els.sidebarOverlay.addEventListener("click", closeSidebar);
+}
+
+function closeUploadDialog() {
+  els.uploadDialog.close?.();
+  state.uploadDialogOpen = false;
 }
 
 function closeSidebar() {
@@ -302,7 +332,7 @@ function renderSidebar() {
 
   els.currentList.innerHTML = current ? renderNavItem(current) : `<p class="empty-nav">暂无当前文件</p>`;
   els.historyList.innerHTML = history.length
-    ? history.map(renderNavItem).join("")
+    ? renderHistoryGroups(history)
     : `<p class="empty-nav">暂无历史文件</p>`;
 
   document.querySelectorAll("[data-issue-id]").forEach((item) => {
@@ -315,15 +345,40 @@ function renderSidebar() {
   });
 }
 
+function renderHistoryGroups(issues) {
+  const groups = issues.reduce((result, issue) => {
+    const monthKey = issue.issueDate?.slice(0, 7) || "未归档日期";
+    if (!result.has(monthKey)) result.set(monthKey, []);
+    result.get(monthKey).push(issue);
+    return result;
+  }, new Map());
+
+  return [...groups.entries()]
+    .map(([monthKey, groupIssues]) => `
+      <section class="history-month">
+        <p class="history-month-label">${escapeHtml(formatMonthLabel(monthKey))}</p>
+        <div class="history-month-list">
+          ${groupIssues.map(renderNavItem).join("")}
+        </div>
+      </section>
+    `)
+    .join("");
+}
+
 function renderNavItem(issue) {
   const selected = selectedIssue()?.id === issue.id ? "active" : "";
   const type = issue.insightType === "weekly" ? "Weekly" : "Monthly";
+  const status = getIssuePreviewStatus(issue);
   return `
     <button class="nav-item ${selected}" type="button" data-issue-id="${issue.id}">
-      <span class="nav-icon">${issue.isLatest ? "●" : "□"}</span>
+      <span class="nav-date">
+        <strong>${escapeHtml(formatIssueDay(issue.issueDate))}</strong>
+        <small>${escapeHtml(type.slice(0, 1))}</small>
+      </span>
       <span>
         <strong>${escapeHtml(issue.title)}</strong>
-        <small>${type}${issue.category ? ` · ${escapeHtml(issue.category)}` : ""}</small>
+        <small>${escapeHtml(issue.fileName || type)}</small>
+        <span class="nav-status ${status.className}">${escapeHtml(status.label)}</span>
       </span>
     </button>
   `;
@@ -686,7 +741,7 @@ async function handleUpload(file) {
     isLatest: Boolean(els.markLatest.checked),
   };
 
-  setUploadStatus("正在保存文件...");
+  setUploadStatus("正在上传并生成在线预览...");
 
   try {
     const serverUpload = await uploadFileForPreview(issue.id, file);
@@ -697,7 +752,9 @@ async function handleUpload(file) {
     state.selectedIssueId = issue.id;
     if (issue.isLatest) markLatestIssue(issue.id);
     els.fileInput.value = "";
-    setUploadStatus("上传成功，已保存到历史归档。");
+    const previewReady = Array.isArray(issue.pageUrls) && issue.pageUrls.length;
+    setUploadStatus(previewReady ? "转换完成，可在线预览。" : "上传成功，已保存到历史归档。");
+    closeUploadDialog();
     render();
   } catch (error) {
     console.error(error);
@@ -745,6 +802,10 @@ function inferFileType(fileName) {
 function setUploadStatus(message) {
   els.uploadStatus.textContent = message;
   els.uploadStatus.hidden = !message;
+  if (els.sidebarStatus) {
+    els.sidebarStatus.textContent = message;
+    els.sidebarStatus.hidden = !message;
+  }
 }
 
 /* ============================================
@@ -764,6 +825,35 @@ function formatLocalDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatMonthLabel(monthKey) {
+  if (!/^\d{4}-\d{2}$/.test(monthKey)) return monthKey;
+  const [year, month] = monthKey.split("-");
+  return `${year} 年 ${Number(month)} 月`;
+}
+
+function formatIssueDay(issueDate) {
+  if (!issueDate) return "--";
+  const parts = issueDate.split("-");
+  if (parts.length < 3) return issueDate;
+  return `${Number(parts[1])}/${Number(parts[2])}`;
+}
+
+function getIssuePreviewStatus(issue) {
+  if (Array.isArray(issue.pageUrls) && issue.pageUrls.length) {
+    return { label: "可在线预览", className: "ready" };
+  }
+  if (issue.previewUrl || issue.fileType === "application/pdf" || issue.fileName?.toLowerCase().endsWith(".pdf")) {
+    return { label: "可预览", className: "ready" };
+  }
+  if (issue.conversionStatus === "pending") {
+    return { label: "转换中", className: "pending" };
+  }
+  if (issue.conversionStatus === "failed") {
+    return { label: "需下载查看", className: "failed" };
+  }
+  return { label: "已归档", className: "" };
 }
 
 function escapeHtml(value) {

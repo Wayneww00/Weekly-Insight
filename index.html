@@ -17,8 +17,7 @@
       <!-- Mobile header: only visible on small screens -->
       <header class="mobile-header">
         <div class="brand">
-          <span class="brand-mark">V</span>
-          <span>vantage</span>
+          <img src="./assets/vantage-logo.svg" alt="vantage" />
         </div>
         <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="打开菜单">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -30,8 +29,7 @@
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-scroll">
           <div class="brand desktop-only">
-            <span class="brand-mark">V</span>
-            <span>vantage</span>
+            <img src="./assets/vantage-logo.svg" alt="vantage" />
           </div>
 
           <!-- Search -->
@@ -44,12 +42,10 @@
           </div>
 
           <!-- Filters -->
-          <div class="filter-bar">
-            <select id="filter-type">
-              <option value="">全部类型</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+          <div class="filter-tabs" aria-label="内容类型筛选">
+            <button type="button" class="active" data-filter-type="">全部</button>
+            <button type="button" data-filter-type="weekly">Weekly</button>
+            <button type="button" data-filter-type="monthly">Monthly</button>
           </div>
 
           <nav class="issue-nav" aria-label="Insight files">
@@ -65,8 +61,30 @@
           </nav>
         </div>
 
-        <!-- Upload -->
-        <div class="sidebar-upload">
+        <div class="sidebar-actions">
+          <button id="open-upload" class="upload-entry" type="button">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M14 10.5v2a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-2M11 5 8 2 5 5M8 2v9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            上传 PPT / PDF
+          </button>
+          <p id="sidebar-status" class="sidebar-status" hidden></p>
+        </div>
+      </aside>
+
+      <dialog id="upload-dialog" class="upload-dialog" aria-labelledby="upload-title">
+        <form method="dialog" class="upload-panel">
+          <div class="upload-panel-header">
+            <div>
+              <p class="panel-kicker">Publish Insight</p>
+              <h2 id="upload-title">上传 PPT / PDF</h2>
+            </div>
+            <button class="dialog-close" type="button" data-close-upload aria-label="关闭上传面板">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
           <div class="upload-type-tabs" aria-label="上传类型">
             <button type="button" class="active" data-insight-type="weekly">Weekly</button>
             <button type="button" data-insight-type="monthly">Monthly</button>
@@ -92,8 +110,8 @@
             <span class="dropzone-hint">点击选择或拖拽文件到此处</span>
           </div>
           <p id="upload-status" class="upload-status" hidden></p>
-        </div>
-      </aside>
+        </form>
+      </dialog>
 
       <!-- Overlay for mobile sidebar -->
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
