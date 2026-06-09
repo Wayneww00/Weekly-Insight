@@ -50,7 +50,6 @@
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
-
           </div>
 
           <nav class="issue-nav" aria-label="Insight files">
@@ -71,6 +70,16 @@
           <div class="upload-type-tabs" aria-label="上传类型">
             <button type="button" class="active" data-insight-type="weekly">Weekly</button>
             <button type="button" data-insight-type="monthly">Monthly</button>
+          </div>
+          <div class="upload-fields">
+            <label>
+              <span>所属日期</span>
+              <input id="issue-date" type="date" />
+            </label>
+            <label class="latest-toggle">
+              <input id="mark-latest" type="checkbox" checked />
+              <span>上传后设为最新一期</span>
+            </label>
           </div>
           <div id="dropzone" class="dropzone">
             <input id="file-input" type="file" accept=".ppt,.pptx,.pdf,application/pdf" />

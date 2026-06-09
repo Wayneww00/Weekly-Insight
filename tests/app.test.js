@@ -1,0 +1,170 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const vm = require("node:vm");
+
+function createElement() {
+  return {
+    classList: { add() {}, remove() {} },
+    dataset: {},
+    hidden: false,
+    innerHTML: "",
+    textContent: "",
+    value: "",
+    addEventListener() {},
+  };
+}
+
+function loadApp() {
+  const elements = new Map();
+  const document = {
+    querySelector(selector) {
+      if (!elements.has(selector)) elements.set(selector, createElement());
+      return elements.get(selector);
+    },
+    querySelectorAll() {
+      return [];
+    },
+  };
+
+  const localStorage = {
+    data: new Map(),
+    getItem(key) {
+      return this.data.has(key) ? this.data.get(key) : null;
+    },
+    setItem(key, value) {
+      this.data.set(key, String(value));
+    },
+  };
+
+  const indexedDB = {
+    open() {
+      const request = {};
+      setTimeout(() => {
+        request.result = {
+          objectStoreNames: { contains: () => true },
+          createObjectStore() {},
+          transaction() {
+            return {
+              objectStore() {
+                return {
+                  get() {
+                    const getRequest = {};
+                    setTimeout(() => {
+                      getRequest.result = null;
+                      getRequest.onsuccess?.();
+                    }, 0);
+                    return getRequest;
+                  },
+                  put() {
+                    const putRequest = {};
+                    setTimeout(() => {
+                      putRequest.result = undefined;
+                      putRequest.onsuccess?.();
+                    }, 0);
+                    return putRequest;
+                  },
+                };
+              },
+              oncomplete: null,
+              onerror: null,
+            };
+          },
+          close() {},
+        };
+        request.onsuccess?.();
+      }, 0);
+      return request;
+    },
+  };
+
+  const code = fs.readFileSync(path.join(__dirname, "..", "src", "app.js"), "utf8");
+  const context = {
+    console,
+    document,
+    indexedDB,
+    localStorage,
+    setTimeout,
+    URL: { createObjectURL: () => "blob:test", revokeObjectURL() {} },
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `${code}
+globalThis.__appTest = {
+  els,
+  state,
+  getFilteredIssues,
+  generateIssueTitle,
+  renderViewerMeta,
+  renderPreview,
+  handleUpload: typeof handleUpload === "function" ? handleUpload : undefined,
+  isAcceptedFile
+};`,
+    context
+  );
+  return context.__appTest;
+}
+
+test("defines the upload workflow handler used by file input and dropzone", () => {
+  const app = loadApp();
+  assert.equal(typeof app.handleUpload, "function");
+});
+
+test("search covers title, summary, category, and tags", () => {
+  const app = loadApp();
+  app.state.searchQuery = "竞品";
+  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "sample-2026-05");
+
+  app.state.searchQuery = "高影响";
+  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "sample-2026-05-18");
+
+  app.state.searchQuery = "基础设施";
+  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "sample-2026-05-18");
+});
+
+test("accepts only ppt, pptx, and pdf uploads by extension", () => {
+  const app = loadApp();
+  assert.equal(app.isAcceptedFile({ name: "weekly.pdf" }), true);
+  assert.equal(app.isAcceptedFile({ name: "monthly.PPTX" }), true);
+  assert.equal(app.isAcceptedFile({ name: "notes.docx" }), false);
+});
+
+test("upload creates a dated issue without category or summary fields", async () => {
+  const app = loadApp();
+  app.els.issueDate.value = "2026-06-09";
+  app.els.markLatest.checked = true;
+
+  await app.handleUpload({
+    name: "weekly-insight.pdf",
+    type: "application/pdf",
+    size: 2048,
+  });
+
+  const uploaded = app.state.issues.find((issue) => issue.fileName === "weekly-insight.pdf");
+  assert.equal(uploaded.title, "2026-06-09 Weekly Insights");
+  assert.equal(uploaded.category, "");
+  assert.equal(uploaded.summary, "");
+  assert.equal(uploaded.isLatest, true);
+  assert.equal(app.state.issues.filter((issue) => issue.isLatest).length, 1);
+});
+
+test("renders converted ppt preview when a pdf preview url exists", () => {
+  const app = loadApp();
+  const issue = {
+    title: "2026-06-09 Weekly Insights",
+    fileName: "weekly.pptx",
+    fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    fileSize: 2048,
+    previewUrl: "/data/uploads/issue-1/weekly.pdf",
+    originalUrl: "/data/uploads/issue-1/weekly.pptx",
+  };
+  const meta = app.renderViewerMeta(issue, issue.originalUrl);
+  const html = app.renderPreview(issue, null);
+
+  assert.equal(meta.includes("PPTX→PDF"), true);
+  assert.equal(meta.includes("data-preview-fullscreen"), true);
+  assert.equal(meta.includes("meta-download"), true);
+  assert.equal(html.includes("preview-toolbar"), false);
+  assert.equal(html.includes("weekly.pdf"), true);
+});

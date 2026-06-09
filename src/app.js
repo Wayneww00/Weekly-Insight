@@ -77,6 +77,8 @@ const els = {
   dropzone: document.querySelector("#dropzone"),
   fileInput: document.querySelector("#file-input"),
   uploadStatus: document.querySelector("#upload-status"),
+  issueDate: document.querySelector("#issue-date"),
+  markLatest: document.querySelector("#mark-latest"),
   searchInput: document.querySelector("#search-input"),
   filterType: document.querySelector("#filter-type"),
 
@@ -92,6 +94,7 @@ initialize();
    ============================================ */
 
 function initialize() {
+  els.issueDate.value = formatLocalDate(new Date());
   state.selectedIssueId = latestIssue()?.id || state.issues[0]?.id || null;
   bindEvents();
   render();
@@ -174,6 +177,25 @@ function saveIssues(issues) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sortIssues(issues)));
 }
 
+function upsertIssue(issue) {
+  const existingIndex = state.issues.findIndex((item) => item.id === issue.id);
+  if (existingIndex >= 0) {
+    state.issues[existingIndex] = issue;
+  } else {
+    state.issues.push(issue);
+  }
+  state.issues = sortIssues(state.issues);
+  saveIssues(state.issues);
+}
+
+function markLatestIssue(issueId) {
+  state.issues = state.issues.map((issue) => ({
+    ...issue,
+    isLatest: issue.id === issueId,
+  }));
+  saveIssues(state.issues);
+}
+
 function sortIssues(issues) {
   return [...issues].sort((a, b) => {
     if (a.issueDate === b.issueDate) return b.createdAt.localeCompare(a.createdAt);
@@ -236,7 +258,16 @@ function getFilteredIssues() {
   // Search
   if (state.searchQuery) {
     const q = state.searchQuery;
-    result = result.filter((issue) => issue.title.toLowerCase().includes(q));
+    result = result.filter((issue) => {
+      const fields = [
+        issue.title,
+        issue.summary,
+        issue.category,
+        ...(issue.tags || []),
+        issue.fileName,
+      ];
+      return fields.some((field) => String(field || "").toLowerCase().includes(q));
+    });
   }
 
   // Type filter
@@ -292,7 +323,7 @@ function renderNavItem(issue) {
       <span class="nav-icon">${issue.isLatest ? "●" : "□"}</span>
       <span>
         <strong>${escapeHtml(issue.title)}</strong>
-        <small>${type}</small>
+        <small>${type}${issue.category ? ` · ${escapeHtml(issue.category)}` : ""}</small>
       </span>
     </button>
   `;
@@ -319,54 +350,78 @@ async function renderViewer() {
   els.viewerTitle.textContent = issue.title;
   els.viewerSummary.textContent = issue.summary || issue.fileName;
 
-  const fileSizeText = formatFileSize(issue.fileSize);
-  const fileExt = issue.fileName.split(".").pop()?.toUpperCase() || "FILE";
-  els.viewerMeta.innerHTML = `
-    <span class="meta-tag">${escapeHtml(fileExt)}</span>
-    <span class="meta-tag">${fileSizeText}</span>
-  `;
-
   // Content
   const file = await getIssueFile(issue.id);
-  els.viewerContent.innerHTML = renderPreview(issue, file);
-
-  // Wire download
-  const downloadBtn = document.querySelector("#download-btn");
-  if (downloadBtn && file) {
-    const url = URL.createObjectURL(file);
-    state.objectUrl = url;
-    downloadBtn.href = url;
-    downloadBtn.download = issue.fileName;
+  let fileUrl = issue.originalUrl || "";
+  if (!fileUrl && file) {
+    fileUrl = URL.createObjectURL(file);
+    state.objectUrl = fileUrl;
   }
+  els.viewerMeta.innerHTML = renderViewerMeta(issue, fileUrl);
+  els.viewerContent.innerHTML = renderPreview(issue, file, fileUrl);
+  bindPreviewActions();
 }
 
-function renderPreview(issue, file) {
-  const isPdf = issue.fileType === "application/pdf" || issue.fileName.toLowerCase().endsWith(".pdf");
-  const isSample = !file;
+function renderViewerMeta(issue, downloadUrl) {
   const fileSizeText = formatFileSize(issue.fileSize);
   const fileExt = issue.fileName.split(".").pop()?.toUpperCase() || "FILE";
+  const previewLabel = issue.previewUrl && fileExt !== "PDF" ? `${fileExt}→PDF` : fileExt;
+  const canFullscreen = Boolean(issue.previewUrl || fileExt === "PDF");
+  const fullscreenAction = canFullscreen
+    ? `
+      <button class="meta-action" type="button" data-preview-fullscreen aria-label="全屏预览">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M5 1H1v4M9 1h4v4M5 13H1V9M13 9v4H9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        全屏
+      </button>
+    `
+    : "";
+  const downloadAction = downloadUrl
+    ? `
+      <a class="meta-download" href="${downloadUrl}" download="${escapeHtml(issue.fileName)}" aria-label="下载原文件">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M7 1v8m0 0l-3-3m3 3l3-3M1 10v2.5a1 1 0 001 1h10a1 1 0 001-1V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        下载
+      </a>
+    `
+    : "";
 
-  if (file && isPdf) {
-    // Real PDF with blob — embed it
-    const url = URL.createObjectURL(file);
-    state.objectUrl = url;
+  return `
+    <span class="meta-tag">${escapeHtml(previewLabel)}</span>
+    <span class="meta-tag">${fileSizeText}</span>
+    ${fullscreenAction}
+    ${downloadAction}
+  `;
+}
+
+function bindPreviewActions() {
+  const fullscreenButton = document.querySelector("[data-preview-fullscreen]");
+  if (!fullscreenButton) return;
+  fullscreenButton.addEventListener("click", () => {
+    const previewShell = document.querySelector(".preview-shell");
+    if (!previewShell) return;
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+      return;
+    }
+
+    previewShell.requestFullscreen?.();
+  });
+}
+
+function renderPreview(issue, file, fileUrl = "") {
+  const isPdf = issue.fileType === "application/pdf" || issue.fileName.toLowerCase().endsWith(".pdf");
+  const hasPdfPreview = Boolean(issue.previewUrl);
+  const isSample = !file;
+  const fileSizeText = formatFileSize(issue.fileSize);
+
+  if (hasPdfPreview || (file && isPdf)) {
+    const url = issue.previewUrl || fileUrl;
     return `
       <div class="preview-shell">
-        <div class="preview-toolbar">
-          <div class="preview-toolbar-info">
-            <span class="file-type-badge">PDF</span>
-            <strong>${escapeHtml(issue.fileName)}</strong>
-            <span>${fileSizeText}</span>
-          </div>
-          <div class="preview-actions">
-            <a id="download-btn" class="btn btn-primary" href="${url}" download="${escapeHtml(issue.fileName)}">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <path d="M7 1v8m0 0l-3-3m3 3l3-3M1 10v2.5a1 1 0 001 1h10a1 1 0 001-1V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              下载原文件
-            </a>
-          </div>
-        </div>
         <div class="preview-stage">
           <embed class="pdf-embed" src="${url}" type="application/pdf" />
         </div>
@@ -376,22 +431,15 @@ function renderPreview(issue, file) {
 
   // PPT or no real file — show honest fallback
   let fallbackBody = "";
-  if (file) {
+  if (file || issue.originalUrl) {
     // Real file but not PDF (e.g. PPT)
-    const url = URL.createObjectURL(file);
-    state.objectUrl = url;
+    const conversionMessage = issue.conversionMessage || "当前版本暂不支持 PPT 在线预览，请下载原文件查看。";
     fallbackBody = `
-      <p>当前版本暂不支持 PPT 在线预览，请下载原文件查看。</p>
+      <p>${escapeHtml(conversionMessage)}</p>
       <div class="file-meta">
         <span>${escapeHtml(issue.fileName)}</span>
         <span>${fileSizeText}</span>
       </div>
-      <a id="download-btn" class="btn btn-primary" href="${url}" download="${escapeHtml(issue.fileName)}">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path d="M7 1v8m0 0l-3-3m3 3l3-3M1 10v2.5a1 1 0 001 1h10a1 1 0 001-1V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        下载原文件
-      </a>
     `;
   } else {
     // Sample/demo file with no blob
@@ -445,6 +493,99 @@ function isAcceptedFile(file) {
   return lowerName.endsWith(".ppt") || lowerName.endsWith(".pptx") || lowerName.endsWith(".pdf");
 }
 
+async function handleUpload(file) {
+  if (!isAcceptedFile(file)) {
+    setUploadStatus("仅支持 PPT、PPTX 或 PDF 文件。");
+    return;
+  }
+
+  const issueDate = els.issueDate.value;
+
+  if (!issueDate) {
+    setUploadStatus("请先选择所属日期。");
+    els.issueDate.focus?.();
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const issue = {
+    id: `issue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: generateIssueTitle(issueDate, state.insightType),
+    insightType: state.insightType,
+    issueDate,
+    category: "",
+    summary: "",
+    tags: [],
+    fileName: file.name,
+    fileType: file.type || inferFileType(file.name),
+    fileSize: file.size || 0,
+    originalUrl: "",
+    previewUrl: "",
+    conversionStatus: "pending",
+    conversionMessage: "",
+    status: "published",
+    publishedAt: now,
+    createdAt: now,
+    updatedAt: now,
+    isLatest: Boolean(els.markLatest.checked),
+  };
+
+  setUploadStatus("正在保存文件...");
+
+  try {
+    const serverUpload = await uploadFileForPreview(issue.id, file);
+    Object.assign(issue, serverUpload);
+    await saveIssueFile(issue.id, file);
+    if (issue.isLatest) markLatestIssue("");
+    upsertIssue(issue);
+    state.selectedIssueId = issue.id;
+    if (issue.isLatest) markLatestIssue(issue.id);
+    els.fileInput.value = "";
+    setUploadStatus("上传成功，已保存到历史归档。");
+    render();
+  } catch (error) {
+    console.error(error);
+    setUploadStatus("文件保存失败，请重试或检查浏览器存储空间。");
+  }
+}
+
+async function uploadFileForPreview(issueId, file) {
+  if (typeof fetch !== "function") {
+    return {
+      conversionStatus: "local",
+      conversionMessage: "当前环境未连接本地预览服务，已保留浏览器本地预览/下载。",
+    };
+  }
+
+  const params = new URLSearchParams({
+    issueId,
+    fileName: file.name,
+  });
+  const response = await fetch(`/api/upload?${params.toString()}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {
+      conversionStatus: "failed",
+      conversionMessage: payload.conversionMessage || payload.error || "上传到本地预览服务失败。",
+    };
+  }
+  return payload;
+}
+
+function inferFileType(fileName) {
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith(".pdf")) return "application/pdf";
+  if (lowerName.endsWith(".pptx")) return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (lowerName.endsWith(".ppt")) return "application/vnd.ms-powerpoint";
+  return "application/octet-stream";
+}
+
 function setUploadStatus(message) {
   els.uploadStatus.textContent = message;
   els.uploadStatus.hidden = !message;
@@ -460,6 +601,13 @@ function formatFileSize(bytes) {
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function escapeHtml(value) {
