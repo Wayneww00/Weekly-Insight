@@ -98,6 +98,7 @@ globalThis.__appTest = {
   generateIssueTitle,
   renderViewerMeta,
   renderPreview,
+  bindSlideReader,
   handleUpload: typeof handleUpload === "function" ? handleUpload : undefined,
   isAcceptedFile
 };`,
@@ -168,4 +169,49 @@ test("renders converted ppt preview when a pdf preview url exists", () => {
   assert.equal(html.includes("data-exit-fullscreen"), true);
   assert.equal(html.includes("preview-toolbar"), false);
   assert.equal(html.includes("weekly.pdf"), true);
+});
+
+test("renders custom continuous reader instead of browser pdf viewer when page images exist", () => {
+  const app = loadApp();
+  const html = app.renderPreview(
+    {
+      title: "2026-06-09 Weekly Insights",
+      fileName: "weekly.pptx",
+      fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      fileSize: 2048,
+      previewUrl: "/data/uploads/issue-1/weekly.pdf",
+      originalUrl: "/data/uploads/issue-1/weekly.pptx",
+      pageUrls: ["/data/uploads/issue-1/pages/page-1.png", "/data/uploads/issue-1/pages/page-2.png"],
+    },
+    null
+  );
+
+  assert.equal(html.includes("slide-reader"), true);
+  assert.equal(html.includes("data-slide-image"), true);
+  assert.equal(html.includes("slide-thumbnails"), true);
+  assert.equal(html.includes("data-toggle-thumbnails"), true);
+  assert.equal(html.includes("slide-edge-zone"), true);
+  assert.equal((html.match(/data-slide-thumb/g) || []).length, 2);
+  assert.equal((html.match(/data-slide-page/g) || []).length, 2);
+  assert.equal(html.includes("pdf-embed"), false);
+  assert.equal(html.includes("1 / 2"), true);
+});
+
+test("slide reader binding keeps keyboard navigation without hijacking native scroll", () => {
+  const app = loadApp();
+  assert.equal(typeof app.bindSlideReader, "function");
+  const html = app.renderPreview(
+    {
+      title: "2026-06-09 Weekly Insights",
+      fileName: "weekly.pptx",
+      fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      fileSize: 2048,
+      pageUrls: ["/page-1.png", "/page-2.png"],
+    },
+    null
+  );
+
+  assert.equal(html.includes("tabindex=\"0\""), true);
+  assert.equal(html.includes("data-slide-reader"), true);
+  assert.equal(html.includes("data-slide-page=\"1\""), true);
 });

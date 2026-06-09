@@ -399,6 +399,7 @@ function renderViewerMeta(issue, downloadUrl) {
 function bindPreviewActions() {
   const fullscreenButton = document.querySelector("[data-preview-fullscreen]");
   const exitFullscreenButton = document.querySelector("[data-exit-fullscreen]");
+  const slideReader = document.querySelector("[data-slide-reader]");
   fullscreenButton?.addEventListener("click", () => {
     const previewShell = document.querySelector(".preview-shell");
     if (!previewShell) return;
@@ -413,6 +414,7 @@ function bindPreviewActions() {
   exitFullscreenButton?.addEventListener("click", () => {
     document.exitFullscreen?.();
   });
+  bindSlideReader(slideReader);
 }
 
 function renderPreview(issue, file, fileUrl = "") {
@@ -420,6 +422,60 @@ function renderPreview(issue, file, fileUrl = "") {
   const hasPdfPreview = Boolean(issue.previewUrl);
   const isSample = !file;
   const fileSizeText = formatFileSize(issue.fileSize);
+  const pageUrls = Array.isArray(issue.pageUrls) ? issue.pageUrls : [];
+
+  if (pageUrls.length) {
+    return `
+      <div class="preview-shell">
+        <button class="fullscreen-exit" type="button" data-exit-fullscreen aria-label="退出全屏">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M5 1v4H1M9 1v4h4M5 13V9H1M13 9H9v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          退出全屏
+        </button>
+        <div class="slide-reader" data-slide-reader data-current-slide="0" data-pages='${escapeHtml(JSON.stringify(pageUrls))}' tabindex="0">
+          <div class="slide-edge-zone" aria-hidden="true"></div>
+          <button class="thumbnail-toggle" type="button" data-toggle-thumbnails aria-label="隐藏缩略图">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M5 2L2 7l3 5M12 2H8M12 7H8M12 12H8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <aside class="slide-thumbnails" aria-label="页面缩略图">
+            ${pageUrls
+              .map((pageUrl, index) => `
+                <button class="slide-thumb ${index === 0 ? "active" : ""}" type="button" data-slide-thumb="${index}" aria-label="跳转到第 ${index + 1} 页">
+                  <img src="${escapeHtml(pageUrl)}" alt="" loading="${index < 4 ? "eager" : "lazy"}" />
+                  <span>${index + 1}</span>
+                </button>
+              `)
+              .join("")}
+          </aside>
+          <div class="slide-stack">
+            ${pageUrls
+              .map((pageUrl, index) => `
+                <figure class="slide-page" data-slide-page="${index}">
+                  <img class="slide-image" data-slide-image src="${escapeHtml(pageUrl)}" alt="${escapeHtml(issue.title)} 第 ${index + 1} 页" loading="${index === 0 ? "eager" : "lazy"}" />
+                </figure>
+              `)
+              .join("")}
+          </div>
+          <div class="slide-controls" aria-label="幻灯片控制">
+            <button type="button" data-slide-prev aria-label="上一页">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <span data-slide-count>1 / ${pageUrls.length}</span>
+            <button type="button" data-slide-next aria-label="下一页">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
   if (hasPdfPreview || (file && isPdf)) {
     const url = issue.previewUrl || fileUrl;
@@ -491,6 +547,97 @@ function renderPreview(issue, file, fileUrl = "") {
       </div>
     </div>
   `;
+}
+
+function bindSlideReader(slideReader) {
+  if (!slideReader || typeof slideReader.querySelector !== "function") return;
+  const pageUrls = JSON.parse(slideReader.dataset.pages || "[]");
+  const count = slideReader.querySelector("[data-slide-count]");
+  const prev = slideReader.querySelector("[data-slide-prev]");
+  const next = slideReader.querySelector("[data-slide-next]");
+  const thumbnailToggle = slideReader.querySelector("[data-toggle-thumbnails]");
+  const thumbnailRail = slideReader.querySelector(".slide-thumbnails");
+  const pages = [...slideReader.querySelectorAll("[data-slide-page]")];
+  const thumbs = [...slideReader.querySelectorAll("[data-slide-thumb]")];
+
+  const updateSlide = (index) => {
+    if (!pageUrls.length || !count) return;
+    const nextIndex = Math.min(Math.max(index, 0), pageUrls.length - 1);
+    slideReader.dataset.currentSlide = String(nextIndex);
+    count.textContent = `${nextIndex + 1} / ${pageUrls.length}`;
+    if (prev) prev.disabled = nextIndex === 0;
+    if (next) next.disabled = nextIndex === pageUrls.length - 1;
+    thumbs.forEach((thumb, index) => {
+      thumb.classList.toggle("active", index === nextIndex);
+      if (index === nextIndex && thumbnailRail) {
+        thumbnailRail.scrollTo({
+          top: Math.max(thumb.offsetTop - thumbnailRail.clientHeight / 2 + thumb.clientHeight / 2, 0),
+          behavior: "smooth",
+        });
+      }
+    });
+  };
+  const scrollToSlide = (index) => {
+    const nextIndex = Math.min(Math.max(index, 0), pageUrls.length - 1);
+    const targetPage = pages[nextIndex];
+    if (!targetPage) return;
+    const readerRect = slideReader.getBoundingClientRect();
+    const targetRect = targetPage.getBoundingClientRect();
+    const targetTop = slideReader.scrollTop + targetRect.top - readerRect.top - 16;
+    slideReader.scrollTo({
+      top: Math.max(targetTop, 0),
+      behavior: "smooth",
+    });
+    updateSlide(nextIndex);
+    slideReader.focus?.({ preventScroll: true });
+  };
+  const syncCurrentFromScroll = () => {
+    if (!pages.length) return;
+    const readerRect = slideReader.getBoundingClientRect();
+    const readerCenter = readerRect.top + readerRect.height / 2;
+    let closestIndex = 0;
+    let closestDistance = Infinity;
+    pages.forEach((page, index) => {
+      const rect = page.getBoundingClientRect();
+      const pageCenter = rect.top + rect.height / 2;
+      const distance = Math.abs(pageCenter - readerCenter);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    updateSlide(closestIndex);
+  };
+  const currentIndex = () => Number(slideReader.dataset.currentSlide || 0);
+  prev?.addEventListener("click", () => scrollToSlide(currentIndex() - 1));
+  next?.addEventListener("click", () => scrollToSlide(currentIndex() + 1));
+  thumbs.forEach((thumb) => {
+    thumb.addEventListener("click", (event) => {
+      event.preventDefault();
+      scrollToSlide(Number(thumb.dataset.slideThumb || 0));
+    });
+  });
+  thumbnailToggle?.addEventListener("click", () => {
+    const collapsed = slideReader.classList.toggle("thumbnails-collapsed");
+    thumbnailToggle.setAttribute("aria-label", collapsed ? "显示缩略图" : "隐藏缩略图");
+  });
+  slideReader.addEventListener("scroll", () => {
+    window.requestAnimationFrame?.(syncCurrentFromScroll) || syncCurrentFromScroll();
+  }, { passive: true });
+  slideReader.addEventListener("keydown", (event) => {
+    const nextKeys = ["ArrowRight", "ArrowDown", "PageDown", " "];
+    const prevKeys = ["ArrowLeft", "ArrowUp", "PageUp"];
+    if (nextKeys.includes(event.key)) {
+      event.preventDefault();
+      scrollToSlide(currentIndex() + 1);
+    }
+    if (prevKeys.includes(event.key)) {
+      event.preventDefault();
+      scrollToSlide(currentIndex() - 1);
+    }
+  });
+  slideReader.focus?.({ preventScroll: true });
+  updateSlide(0);
 }
 
 /* ============================================

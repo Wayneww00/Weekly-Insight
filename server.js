@@ -15,6 +15,7 @@ const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".pdf": "application/pdf",
+  ".png": "image/png",
   ".ppt": "application/vnd.ms-powerpoint",
   ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
@@ -73,6 +74,7 @@ async function handleUploadRequest(request, response) {
     const result = {
       originalUrl,
       previewUrl: ext === ".pdf" ? originalUrl : "",
+      pageUrls: [],
       conversionStatus: ext === ".pdf" ? "ready" : "pending",
       conversionMessage: ext === ".pdf" ? "PDF can be previewed directly." : "Waiting for PPT conversion.",
     };
@@ -84,6 +86,13 @@ async function handleUploadRequest(request, response) {
       result.conversionMessage = conversion.message;
     }
 
+    if (result.previewUrl) {
+      const pdfPath = ext === ".pdf"
+        ? originalPath
+        : path.join(uploadDir, decodeURIComponent(path.basename(result.previewUrl)));
+      result.pageUrls = await renderPdfPages(pdfPath, uploadDir, issueId);
+    }
+
     writeJson(response, 200, result);
   } catch (error) {
     writeJson(response, 500, {
@@ -92,6 +101,22 @@ async function handleUploadRequest(request, response) {
       conversionMessage: error.message,
     });
   }
+}
+
+async function renderPdfPages(pdfPath, uploadDir, issueId) {
+  const pagesDir = path.join(uploadDir, "pages");
+  await fs.promises.rm(pagesDir, { recursive: true, force: true });
+  await fs.promises.mkdir(pagesDir, { recursive: true });
+
+  await execFileAsync("pdftoppm", ["-png", "-r", "144", pdfPath, path.join(pagesDir, "page")], {
+    timeout: 120000,
+  });
+
+  const pageFiles = (await fs.promises.readdir(pagesDir))
+    .filter((fileName) => /^page-\d+\.png$/.test(fileName))
+    .sort((a, b) => Number(a.match(/\d+/)?.[0] || 0) - Number(b.match(/\d+/)?.[0] || 0));
+
+  return pageFiles.map((fileName) => `/data/uploads/${issueId}/pages/${encodeURIComponent(fileName)}`);
 }
 
 function writeRequestBody(request, filePath) {
