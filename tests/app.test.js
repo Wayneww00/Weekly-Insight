@@ -179,6 +179,8 @@ test("upload creates a dated issue without category or summary fields", async ()
   assert.equal(uploaded.summary, "");
   assert.equal(uploaded.isLatest, true);
   assert.equal(app.state.issues.filter((issue) => issue.isLatest).length, 1);
+  assert.equal(app.els.selectedFile.hidden, false);
+  assert.equal(app.els.selectedFile.innerHTML.includes("weekly-insight.pdf"), true);
 });
 
 test("renders converted ppt preview when a pdf preview url exists", () => {

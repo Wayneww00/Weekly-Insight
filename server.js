@@ -7,6 +7,7 @@ const { promisify } = require("node:util");
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
 const uploadsRoot = path.join(root, "data", "uploads");
+const previewDpi = Number(process.env.PREVIEW_DPI || 300);
 const execFileAsync = promisify(execFile);
 
 const mimeTypes = {
@@ -131,8 +132,8 @@ async function renderPdfPages(pdfPath, uploadDir, issueId) {
   await fs.promises.rm(pagesDir, { recursive: true, force: true });
   await fs.promises.mkdir(pagesDir, { recursive: true });
 
-  await execFileAsync("pdftoppm", ["-png", "-r", "144", pdfPath, path.join(pagesDir, "page")], {
-    timeout: 120000,
+  await execFileAsync("pdftoppm", ["-png", "-r", String(previewDpi), pdfPath, path.join(pagesDir, "page")], {
+    timeout: 300000,
   });
 
   const pageFiles = (await fs.promises.readdir(pagesDir))

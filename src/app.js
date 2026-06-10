@@ -31,6 +31,7 @@ const els = {
   viewerContent: document.querySelector("#viewer-content"),
   dropzone: document.querySelector("#dropzone"),
   fileInput: document.querySelector("#file-input"),
+  selectedFile: document.querySelector("#selected-file"),
   uploadStatus: document.querySelector("#upload-status"),
   issueDate: document.querySelector("#issue-date"),
   markLatest: document.querySelector("#mark-latest"),
@@ -664,8 +665,11 @@ function isAcceptedFile(file) {
 }
 
 async function handleUpload(file) {
+  setSelectedFile(file, "已选择，准备上传...");
+
   if (!isAcceptedFile(file)) {
     setUploadStatus("仅支持 PPT、PPTX 或 PDF 文件。");
+    setSelectedFile(file, "格式不支持");
     return;
   }
 
@@ -673,6 +677,7 @@ async function handleUpload(file) {
 
   if (!issueDate) {
     setUploadStatus("请先选择所属日期。");
+    setSelectedFile(file, "等待选择所属日期");
     els.issueDate.focus?.();
     return;
   }
@@ -700,6 +705,7 @@ async function handleUpload(file) {
     isLatest: Boolean(els.markLatest.checked),
   };
 
+  setSelectedFile(file, "正在上传并生成在线预览...");
   setUploadStatus("正在上传并生成在线预览...");
 
   try {
@@ -712,11 +718,13 @@ async function handleUpload(file) {
     if (issue.isLatest) markLatestIssue(issue.id);
     els.fileInput.value = "";
     const previewReady = Array.isArray(issue.pageUrls) && issue.pageUrls.length;
+    setSelectedFile(file, previewReady ? "转换完成，可在线预览" : "上传成功，已保存");
     setUploadStatus(previewReady ? "转换完成，可在线预览。" : "上传成功，已保存到历史归档。");
     closeUploadDialog();
     render();
   } catch (error) {
     console.error(error);
+    setSelectedFile(file, "上传失败");
     setUploadStatus("文件保存失败，请重试或检查浏览器存储空间。");
   }
 }
@@ -805,6 +813,29 @@ function setUploadStatus(message) {
     els.sidebarStatus.textContent = message;
     els.sidebarStatus.hidden = !message;
   }
+}
+
+function setSelectedFile(file, status) {
+  if (!els.selectedFile) return;
+  if (!file) {
+    els.selectedFile.hidden = true;
+    els.selectedFile.innerHTML = "";
+    return;
+  }
+
+  els.selectedFile.hidden = false;
+  els.selectedFile.innerHTML = `
+    <span class="selected-file-icon" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M9 1.5H4A1.5 1.5 0 0 0 2.5 3v10A1.5 1.5 0 0 0 4 14.5h8A1.5 1.5 0 0 0 13.5 13V6L9 1.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+        <path d="M9 1.5V6h4.5" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="selected-file-text">
+      <strong>${escapeHtml(file.name)}</strong>
+      <small>${escapeHtml(formatFileSize(file.size || 0))} · ${escapeHtml(status)}</small>
+    </span>
+  `;
 }
 
 /* ============================================

@@ -616,6 +616,7 @@ body {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+  z-index: 2;
 }
 
 .dropzone svg {
@@ -636,6 +637,58 @@ body {
 .dropzone-hint {
   font-size: 11px;
   color: var(--ink-500);
+}
+
+.selected-file {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: var(--space-sm);
+  padding: 10px;
+  border: 1px solid rgba(94, 207, 181, 0.22);
+  border-radius: var(--radius-sm);
+  background: rgba(61, 159, 138, 0.1);
+  color: var(--ink-200);
+  text-align: left;
+  pointer-events: none;
+}
+
+.selected-file-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: rgba(94, 207, 181, 0.12);
+  color: var(--accent-text);
+}
+
+.selected-file-text {
+  min-width: 0;
+}
+
+.selected-file-text strong,
+.selected-file-text small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-file-text strong {
+  color: var(--ink-100);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.selected-file-text small {
+  margin-top: 2px;
+  color: var(--accent-text);
+  font-size: 11px;
 }
 
 .dropzone:hover .dropzone-hint,
