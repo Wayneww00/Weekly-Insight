@@ -257,16 +257,16 @@ body {
 }
 
 .nav-item {
-  display: block;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: start;
+  gap: 6px;
   width: 100%;
-  min-height: 58px;
-  padding: 11px 12px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--ink-400);
-  text-align: left;
-  cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
 
@@ -278,6 +278,45 @@ body {
 .nav-item.active {
   background: var(--accent-glow);
   color: var(--ink-100);
+}
+
+.nav-open {
+  display: block;
+  min-width: 0;
+  min-height: 58px;
+  padding: 11px 0 11px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-delete {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 8px 8px 0 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-500);
+  cursor: pointer;
+  opacity: 0.42;
+  transition: opacity 0.12s, background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.nav-item:hover .nav-delete,
+.nav-delete:focus-visible {
+  opacity: 1;
+}
+
+.nav-delete:hover {
+  border-color: rgba(210, 96, 96, 0.26);
+  background: rgba(210, 96, 96, 0.1);
+  color: #e17a7a;
 }
 
 .nav-item strong,

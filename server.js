@@ -27,6 +27,11 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "DELETE" && request.url?.startsWith("/api/issue")) {
+    await handleDeleteIssueRequest(request, response);
+    return;
+  }
+
   const requestPath = decodeURIComponent(new URL(request.url || "/", `http://localhost:${port}`).pathname);
   const safePath = path.normalize(requestPath).replace(/^(\.\.[/\\])+/, "");
   const filePath = path.join(root, safePath === "/" ? "index.html" : safePath);
@@ -101,6 +106,23 @@ async function handleUploadRequest(request, response) {
       conversionStatus: "failed",
       conversionMessage: error.message,
     });
+  }
+}
+
+async function handleDeleteIssueRequest(request, response) {
+  const url = new URL(request.url || "/", `http://localhost:${port}`);
+  const issueId = sanitizeSegment(url.searchParams.get("issueId") || "");
+
+  if (!issueId) {
+    writeJson(response, 400, { error: "Missing issue id." });
+    return;
+  }
+
+  try {
+    await fs.promises.rm(path.join(uploadsRoot, issueId), { recursive: true, force: true });
+    writeJson(response, 200, { ok: true });
+  } catch (error) {
+    writeJson(response, 500, { error: "Delete failed.", message: error.message });
   }
 }
 

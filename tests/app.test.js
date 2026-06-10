@@ -36,6 +36,9 @@ function loadApp() {
     setItem(key, value) {
       this.data.set(key, String(value));
     },
+    removeItem(key) {
+      this.data.delete(key);
+    },
   };
 
   const indexedDB = {
@@ -117,14 +120,39 @@ test("defines the upload workflow handler used by file input and dropzone", () =
 
 test("search covers title, summary, category, and tags", () => {
   const app = loadApp();
+  app.state.issues = [
+    {
+      id: "search-monthly",
+      title: "2026-05 Monthly Insights",
+      insightType: "monthly",
+      issueDate: "2026-05-01",
+      summary: "五月月度洞察复盘消费科技新品。",
+      category: "竞品资讯",
+      tags: ["Consumer"],
+      fileName: "monthly.pdf",
+      createdAt: "2026-05-31T09:00:00.000Z",
+    },
+    {
+      id: "search-weekly",
+      title: "2026-05-18 Weekly Insights",
+      insightType: "weekly",
+      issueDate: "2026-05-18",
+      summary: "本期覆盖 AI 产品更新和算力基础设施趋势。",
+      category: "AI 新闻",
+      tags: ["高影响"],
+      fileName: "weekly.pdf",
+      createdAt: "2026-05-18T09:00:00.000Z",
+    },
+  ];
+
   app.state.searchQuery = "竞品";
-  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "sample-2026-05");
+  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "search-monthly");
 
   app.state.searchQuery = "高影响";
-  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "sample-2026-05-18");
+  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "search-weekly");
 
   app.state.searchQuery = "基础设施";
-  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "sample-2026-05-18");
+  assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "search-weekly");
 });
 
 test("accepts only ppt, pptx, and pdf uploads by extension", () => {

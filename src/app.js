@@ -3,57 +3,11 @@
    ============================================ */
 
 const STORAGE_KEY = "insight-hub:issues";
+const EMPTY_LIBRARY_RESET_KEY = "insight-hub:empty-library-reset-2026-06-10";
+const FILE_STORE_RESET_KEY = "insight-hub:file-store-reset-2026-06-10";
 const DB_NAME = "insight-hub";
 const STORE_NAME = "files";
 const DB_VERSION = 1;
-
-const sampleIssues = [
-  {
-    id: "sample-2026-06-01",
-    title: "2026-06-01 Weekly Insights",
-    insightType: "weekly",
-    issueDate: "2026-06-01",
-    category: "市场机会雷达",
-    summary: "汇总宏观、行业、地区活动与未来事件，统一判断风险暴露和市场机会窗口。",
-    tags: ["Crypto 行业", "市场动态", "中影响"],
-    fileName: "2026-06-01-weekly-insights.pdf",
-    fileType: "application/pdf",
-    fileSize: 12800000,
-    createdAt: "2026-06-01T09:00:00.000Z",
-    updatedAt: "2026-06-01T09:00:00.000Z",
-    isLatest: true,
-  },
-  {
-    id: "sample-2026-05",
-    title: "2026-05 Monthly Insights",
-    insightType: "monthly",
-    issueDate: "2026-05-01",
-    category: "竞品资讯",
-    summary: "五月月度洞察复盘消费科技新品、渠道变化和主要厂商的 AI 功能竞争。",
-    tags: ["Consumer", "AI Devices", "Monthly"],
-    fileName: "2026-05-monthly-insights.pptx",
-    fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    fileSize: 23500000,
-    createdAt: "2026-05-31T09:00:00.000Z",
-    updatedAt: "2026-05-31T09:00:00.000Z",
-    isLatest: false,
-  },
-  {
-    id: "sample-2026-05-18",
-    title: "2026-05-18 Weekly Insights",
-    insightType: "weekly",
-    issueDate: "2026-05-18",
-    category: "AI 新闻",
-    summary: "本期覆盖 AI 产品更新、模型部署、企业应用落地和算力基础设施趋势。",
-    tags: ["AI 新闻", "产品更新", "高影响"],
-    fileName: "2026-05-18-weekly-insights.pdf",
-    fileType: "application/pdf",
-    fileSize: 9400000,
-    createdAt: "2026-05-18T09:00:00.000Z",
-    updatedAt: "2026-05-18T09:00:00.000Z",
-    isLatest: false,
-  },
-];
 
 const state = {
   issues: loadIssues(),
@@ -99,6 +53,7 @@ initialize();
    ============================================ */
 
 function initialize() {
+  clearStoredFilesOnce();
   els.issueDate.value = formatLocalDate(new Date());
   state.selectedIssueId = latestIssue()?.id || state.issues[0]?.id || null;
   bindEvents();
@@ -190,17 +145,34 @@ function closeSidebar() {
    ============================================ */
 
 function loadIssues() {
+  if (localStorage.getItem(EMPTY_LIBRARY_RESET_KEY) !== "done") {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(EMPTY_LIBRARY_RESET_KEY, "done");
+    return [];
+  }
+
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    saveIssues(sampleIssues);
-    return sampleIssues;
+    return [];
   }
   try {
     return sortIssues(JSON.parse(raw));
   } catch {
-    saveIssues(sampleIssues);
-    return sampleIssues;
+    return [];
   }
+}
+
+function clearStoredFilesOnce() {
+  if (localStorage.getItem(FILE_STORE_RESET_KEY) === "done") return;
+  if (typeof indexedDB?.deleteDatabase !== "function") {
+    localStorage.setItem(FILE_STORE_RESET_KEY, "done");
+    return;
+  }
+
+  const request = indexedDB.deleteDatabase(DB_NAME);
+  request.onsuccess = () => localStorage.setItem(FILE_STORE_RESET_KEY, "done");
+  request.onerror = () => localStorage.setItem(FILE_STORE_RESET_KEY, "done");
+  request.onblocked = () => localStorage.setItem(FILE_STORE_RESET_KEY, "done");
 }
 
 function saveIssues(issues) {
@@ -268,6 +240,10 @@ function saveIssueFile(issueId, file) {
 
 function getIssueFile(issueId) {
   return withStore("readonly", (store) => store.get(issueId)).then((result) => result?.file || null);
+}
+
+function deleteIssueFile(issueId) {
+  return withStore("readwrite", (store) => store.delete(issueId));
 }
 
 /* ============================================
@@ -343,6 +319,12 @@ function renderSidebar() {
       renderViewer();
     });
   });
+  document.querySelectorAll("[data-delete-issue-id]").forEach((item) => {
+    item.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteIssue(item.dataset.deleteIssueId);
+    });
+  });
 }
 
 function renderHistoryGroups(issues) {
@@ -369,13 +351,18 @@ function renderNavItem(issue) {
   const selected = selectedIssue()?.id === issue.id ? "active" : "";
   const status = getIssuePreviewStatus(issue);
   return `
-    <button class="nav-item ${selected}" type="button" data-issue-id="${issue.id}">
-      <span>
+    <div class="nav-item ${selected}">
+      <button class="nav-open" type="button" data-issue-id="${issue.id}">
         <strong>${escapeHtml(getIssueDisplayTitle(issue))}</strong>
         <small>${escapeHtml(getIssueDisplayMeta(issue))}</small>
         <span class="nav-status ${status.className}">${escapeHtml(status.label)}</span>
-      </span>
-    </button>
+      </button>
+      <button class="nav-delete" type="button" data-delete-issue-id="${issue.id}" aria-label="删除 ${escapeHtml(getIssueDisplayTitle(issue))}">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M2 3.5h10M5.5 1.5h3M5 5.5v5M9 5.5v5M3.5 3.5l.5 8.5a1 1 0 0 0 1 .95h4a1 1 0 0 0 1-.95l.5-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
   `;
 }
 
@@ -732,6 +719,46 @@ async function handleUpload(file) {
     console.error(error);
     setUploadStatus("文件保存失败，请重试或检查浏览器存储空间。");
   }
+}
+
+async function deleteIssue(issueId) {
+  const issue = state.issues.find((item) => item.id === issueId);
+  if (!issue) return;
+
+  const confirmed = window.confirm(`确定删除「${getIssueDisplayTitle(issue)}」吗？此操作会移除该文件和预览资产。`);
+  if (!confirmed) return;
+
+  try {
+    await deleteIssueFile(issueId).catch(() => {});
+    await deleteIssueAssets(issueId).catch(() => {});
+
+    const wasSelected = selectedIssue()?.id === issueId;
+    const wasLatest = issue.isLatest;
+    state.issues = state.issues.filter((item) => item.id !== issueId);
+
+    if (wasLatest && state.issues.length) {
+      state.issues = state.issues.map((item, index) => ({
+        ...item,
+        isLatest: index === 0,
+      }));
+    }
+
+    state.selectedIssueId = wasSelected
+      ? latestIssue()?.id || state.issues[0]?.id || null
+      : state.selectedIssueId;
+
+    saveIssues(state.issues);
+    setUploadStatus("已删除文件。");
+    render();
+  } catch (error) {
+    console.error(error);
+    setUploadStatus("删除失败，请重试。");
+  }
+}
+
+async function deleteIssueAssets(issueId) {
+  if (typeof fetch !== "function") return;
+  await fetch(`/api/issue?issueId=${encodeURIComponent(issueId)}`, { method: "DELETE" });
 }
 
 async function uploadFileForPreview(issueId, file) {
