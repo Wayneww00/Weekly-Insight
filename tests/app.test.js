@@ -206,7 +206,8 @@ test("renders custom continuous reader instead of browser pdf viewer when page i
   assert.equal((html.match(/data-slide-thumb/g) || []).length, 2);
   assert.equal((html.match(/data-slide-page/g) || []).length, 2);
   assert.equal(html.includes("pdf-embed"), false);
-  assert.equal(html.includes("1 / 2"), true);
+  assert.equal(html.includes("slide-controls"), false);
+  assert.equal(html.includes("data-slide-count"), false);
 });
 
 test("slide reader binding keeps keyboard navigation without hijacking native scroll", () => {

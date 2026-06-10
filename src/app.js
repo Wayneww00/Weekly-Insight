@@ -513,19 +513,6 @@ function renderPreview(issue, file, fileUrl = "") {
               `)
               .join("")}
           </div>
-          <div class="slide-controls" aria-label="幻灯片控制">
-            <button type="button" data-slide-prev aria-label="上一页">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <span data-slide-count>1 / ${pageUrls.length}</span>
-            <button type="button" data-slide-next aria-label="下一页">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
         </div>
       </div>
     `;
@@ -600,21 +587,15 @@ function renderPreview(issue, file, fileUrl = "") {
 function bindSlideReader(slideReader) {
   if (!slideReader || typeof slideReader.querySelector !== "function") return;
   const pageUrls = JSON.parse(slideReader.dataset.pages || "[]");
-  const count = slideReader.querySelector("[data-slide-count]");
-  const prev = slideReader.querySelector("[data-slide-prev]");
-  const next = slideReader.querySelector("[data-slide-next]");
   const thumbnailToggle = slideReader.querySelector("[data-toggle-thumbnails]");
   const thumbnailRail = slideReader.querySelector(".slide-thumbnails");
   const pages = [...slideReader.querySelectorAll("[data-slide-page]")];
   const thumbs = [...slideReader.querySelectorAll("[data-slide-thumb]")];
 
   const updateSlide = (index) => {
-    if (!pageUrls.length || !count) return;
+    if (!pageUrls.length) return;
     const nextIndex = Math.min(Math.max(index, 0), pageUrls.length - 1);
     slideReader.dataset.currentSlide = String(nextIndex);
-    count.textContent = `${nextIndex + 1} / ${pageUrls.length}`;
-    if (prev) prev.disabled = nextIndex === 0;
-    if (next) next.disabled = nextIndex === pageUrls.length - 1;
     thumbs.forEach((thumb, index) => {
       thumb.classList.toggle("active", index === nextIndex);
       if (index === nextIndex && thumbnailRail) {
@@ -657,8 +638,6 @@ function bindSlideReader(slideReader) {
     updateSlide(closestIndex);
   };
   const currentIndex = () => Number(slideReader.dataset.currentSlide || 0);
-  prev?.addEventListener("click", () => scrollToSlide(currentIndex() - 1));
-  next?.addEventListener("click", () => scrollToSlide(currentIndex() + 1));
   thumbs.forEach((thumb) => {
     thumb.addEventListener("click", (event) => {
       event.preventDefault();
