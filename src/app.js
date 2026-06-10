@@ -705,11 +705,20 @@ async function handleUpload(file) {
     isLatest: Boolean(els.markLatest.checked),
   };
 
-  setSelectedFile(file, "正在上传并生成在线预览...");
-  setUploadStatus("正在上传并生成在线预览...");
+  const uploadStartedAt = Date.now();
+  const updateProgress = (progress) => {
+    const status = formatUploadProgress(progress, uploadStartedAt);
+    setSelectedFile(file, status.label, {
+      progress: status.progress,
+      indeterminate: status.indeterminate,
+    });
+    setUploadStatus(status.message);
+  };
+
+  updateProgress({ phase: "uploading", loaded: 0, total: file.size || 0, percent: 0 });
 
   try {
-    const serverUpload = await uploadFileForPreview(issue.id, file);
+    const serverUpload = await uploadFileForPreview(issue.id, file, updateProgress);
     Object.assign(issue, serverUpload);
     await saveIssueFile(issue.id, file);
     if (issue.isLatest) markLatestIssue("");
@@ -718,7 +727,7 @@ async function handleUpload(file) {
     if (issue.isLatest) markLatestIssue(issue.id);
     els.fileInput.value = "";
     const previewReady = Array.isArray(issue.pageUrls) && issue.pageUrls.length;
-    setSelectedFile(file, previewReady ? "转换完成，可在线预览" : "上传成功，已保存");
+    setSelectedFile(file, previewReady ? "转换完成，可在线预览" : "上传成功，已保存", { progress: 100 });
     setUploadStatus(previewReady ? "转换完成，可在线预览。" : "上传成功，已保存到历史归档。");
     closeUploadDialog();
     render();
@@ -769,7 +778,11 @@ async function deleteIssueAssets(issueId) {
   await fetch(`/api/issue?issueId=${encodeURIComponent(issueId)}`, { method: "DELETE" });
 }
 
-async function uploadFileForPreview(issueId, file) {
+async function uploadFileForPreview(issueId, file, onProgress) {
+  if (typeof XMLHttpRequest === "function") {
+    return uploadFileWithProgress(issueId, file, onProgress);
+  }
+
   if (typeof fetch !== "function") {
     return {
       conversionStatus: "local",
@@ -798,6 +811,57 @@ async function uploadFileForPreview(issueId, file) {
   return payload;
 }
 
+function uploadFileWithProgress(issueId, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const params = new URLSearchParams({
+      issueId,
+      fileName: file.name,
+    });
+    const request = new XMLHttpRequest();
+
+    request.open("POST", `/api/upload?${params.toString()}`);
+    request.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) {
+        onProgress?.({ phase: "uploading", loaded: 0, total: file.size || 0, indeterminate: true });
+        return;
+      }
+      onProgress?.({
+        phase: "uploading",
+        loaded: event.loaded,
+        total: event.total,
+        percent: Math.round((event.loaded / event.total) * 100),
+      });
+    });
+    request.upload.addEventListener("load", () => {
+      onProgress?.({ phase: "processing", loaded: file.size || 0, total: file.size || 0, percent: 100 });
+    });
+    request.addEventListener("load", () => {
+      const payload = parseJsonResponse(request.responseText);
+      if (request.status < 200 || request.status >= 300) {
+        resolve({
+          conversionStatus: "failed",
+          conversionMessage: payload.conversionMessage || payload.error || "上传到本地预览服务失败。",
+        });
+        return;
+      }
+      resolve(payload);
+    });
+    request.addEventListener("error", () => reject(new Error("上传网络异常，请重试。")));
+    request.addEventListener("timeout", () => reject(new Error("上传超时，请重试。")));
+    request.timeout = 360000;
+    request.send(file);
+  });
+}
+
+function parseJsonResponse(value) {
+  try {
+    return JSON.parse(value || "{}");
+  } catch {
+    return {};
+  }
+}
+
 function inferFileType(fileName) {
   const lowerName = fileName.toLowerCase();
   if (lowerName.endsWith(".pdf")) return "application/pdf";
@@ -815,7 +879,7 @@ function setUploadStatus(message) {
   }
 }
 
-function setSelectedFile(file, status) {
+function setSelectedFile(file, status, options = {}) {
   if (!els.selectedFile) return;
   if (!file) {
     els.selectedFile.hidden = true;
@@ -824,6 +888,17 @@ function setSelectedFile(file, status) {
   }
 
   els.selectedFile.hidden = false;
+  const progressValue = Number.isFinite(options.progress)
+    ? Math.max(0, Math.min(100, Math.round(options.progress)))
+    : null;
+  const progressMarkup = progressValue !== null || options.indeterminate
+    ? `
+      <span class="selected-file-progress ${options.indeterminate ? "indeterminate" : ""}" aria-hidden="true">
+        <span style="width: ${progressValue ?? 44}%"></span>
+      </span>
+    `
+    : "";
+
   els.selectedFile.innerHTML = `
     <span class="selected-file-icon" aria-hidden="true">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -835,7 +910,44 @@ function setSelectedFile(file, status) {
       <strong>${escapeHtml(file.name)}</strong>
       <small>${escapeHtml(formatFileSize(file.size || 0))} · ${escapeHtml(status)}</small>
     </span>
+    ${progressMarkup}
   `;
+}
+
+function formatUploadProgress(progress, startedAt) {
+  if (progress.phase === "processing") {
+    return {
+      label: "上传完成，正在生成高清预览...",
+      message: "上传完成，正在生成高清预览...",
+      progress: 100,
+    };
+  }
+
+  const percent = Number.isFinite(progress.percent)
+    ? Math.max(0, Math.min(100, Math.round(progress.percent)))
+    : null;
+  const remaining = formatRemainingUploadTime(progress.loaded, progress.total, startedAt);
+  const suffix = remaining ? ` · 预计还需 ${remaining}` : "";
+
+  return {
+    label: percent === null ? "正在上传..." : `正在上传 ${percent}%${suffix}`,
+    message: percent === null ? "正在上传文件..." : `正在上传文件 ${percent}%${suffix}`,
+    progress: percent,
+    indeterminate: percent === null,
+  };
+}
+
+function formatRemainingUploadTime(loaded, total, startedAt) {
+  if (!loaded || !total || loaded >= total) return "";
+  const elapsedSeconds = Math.max(0.5, (Date.now() - startedAt) / 1000);
+  const bytesPerSecond = loaded / elapsedSeconds;
+  if (!bytesPerSecond) return "";
+  const remainingSeconds = Math.ceil((total - loaded) / bytesPerSecond);
+  if (!Number.isFinite(remainingSeconds) || remainingSeconds <= 0) return "";
+  if (remainingSeconds < 60) return `${remainingSeconds} 秒`;
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+  return seconds ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分钟`;
 }
 
 /* ============================================

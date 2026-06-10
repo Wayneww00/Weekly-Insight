@@ -106,6 +106,7 @@ globalThis.__appTest = {
   renderPreview,
   bindSlideReader,
   handleUpload: typeof handleUpload === "function" ? handleUpload : undefined,
+  setSelectedFile,
   isAcceptedFile
 };`,
     context
@@ -181,6 +182,24 @@ test("upload creates a dated issue without category or summary fields", async ()
   assert.equal(app.state.issues.filter((issue) => issue.isLatest).length, 1);
   assert.equal(app.els.selectedFile.hidden, false);
   assert.equal(app.els.selectedFile.innerHTML.includes("weekly-insight.pdf"), true);
+});
+
+test("selected upload file can show progress feedback", () => {
+  const app = loadApp();
+  app.setSelectedFile(
+    {
+      name: "Market Trends (May 2026).pdf",
+      size: 35000000,
+    },
+    "正在上传 42%",
+    { progress: 42 }
+  );
+
+  assert.equal(app.els.selectedFile.hidden, false);
+  assert.equal(app.els.selectedFile.innerHTML.includes("Market Trends (May 2026).pdf"), true);
+  assert.equal(app.els.selectedFile.innerHTML.includes("正在上传 42%"), true);
+  assert.equal(app.els.selectedFile.innerHTML.includes("selected-file-progress"), true);
+  assert.equal(app.els.selectedFile.innerHTML.includes("width: 42%"), true);
 });
 
 test("renders converted ppt preview when a pdf preview url exists", () => {
