@@ -739,6 +739,11 @@ body {
   100% { transform: translateX(260%); }
 }
 
+@keyframes pulseProcessing {
+  0%, 100% { opacity: 0.55; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 /* ============================================
    Viewer
    ============================================ */
@@ -1160,6 +1165,16 @@ body {
 
 .fallback-card .file-icon svg {
   color: var(--ink-400);
+}
+
+.processing-card .file-icon {
+  border-color: rgba(94, 207, 181, 0.2);
+  background: rgba(94, 207, 181, 0.08);
+}
+
+.processing-card .file-icon svg {
+  color: var(--accent-text);
+  animation: pulseProcessing 1.6s ease-in-out infinite;
 }
 
 .fallback-card h3 {

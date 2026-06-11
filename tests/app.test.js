@@ -107,6 +107,7 @@ globalThis.__appTest = {
   bindSlideReader,
   handleUpload: typeof handleUpload === "function" ? handleUpload : undefined,
   setSelectedFile,
+  formatUploadProgress,
   isAcceptedFile
 };`,
     context
@@ -200,6 +201,37 @@ test("selected upload file can show progress feedback", () => {
   assert.equal(app.els.selectedFile.innerHTML.includes("正在上传 42%"), true);
   assert.equal(app.els.selectedFile.innerHTML.includes("selected-file-progress"), true);
   assert.equal(app.els.selectedFile.innerHTML.includes("width: 42%"), true);
+});
+
+test("upload progress labels expose clear publishing phases", () => {
+  const app = loadApp();
+  const startedAt = Date.now();
+
+  assert.equal(app.formatUploadProgress({ phase: "uploading", percent: 42, loaded: 42, total: 100 }, startedAt).label.includes("正在上传 42%"), true);
+  assert.equal(app.formatUploadProgress({ phase: "converting" }, startedAt).label, "上传完成，正在转换 PPT...");
+  assert.equal(app.formatUploadProgress({ phase: "rendering" }, startedAt).label, "正在生成高清预览...");
+  assert.equal(app.formatUploadProgress({ phase: "published" }, startedAt).label, "发布完成");
+});
+
+test("processing issues render an explicit background status", () => {
+  const app = loadApp();
+  const html = app.renderPreview(
+    {
+      title: "2026-06-09 Weekly Insights",
+      fileName: "weekly.pptx",
+      fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      fileSize: 2048,
+      status: "processing",
+      conversionStatus: "converting",
+      conversionMessage: "正在转换 PPT 为 PDF。",
+      pageUrls: [],
+    },
+    null
+  );
+
+  assert.equal(html.includes("processing-card"), true);
+  assert.equal(html.includes("正在转换 PPT"), true);
+  assert.equal(html.includes("正在转换 PPT 为 PDF。"), true);
 });
 
 test("renders converted ppt preview when a pdf preview url exists", () => {

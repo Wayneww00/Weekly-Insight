@@ -5,6 +5,7 @@
 const STORAGE_KEY = "insight-hub:issues";
 const EMPTY_LIBRARY_RESET_KEY = "insight-hub:empty-library-reset-2026-06-10";
 const FILE_STORE_RESET_KEY = "insight-hub:file-store-reset-2026-06-10";
+const LOCAL_IMPORT_KEY = "insight-hub:local-imported-to-server-2026-06-11";
 const DB_NAME = "insight-hub";
 const STORE_NAME = "files";
 const DB_VERSION = 1;
@@ -18,6 +19,7 @@ const state = {
   searchQuery: "",
   filterType: "",
   uploadDialogOpen: false,
+  statusPollTimer: null,
 
 };
 
@@ -59,6 +61,7 @@ function initialize() {
   state.selectedIssueId = latestIssue()?.id || state.issues[0]?.id || null;
   bindEvents();
   render();
+  hydrateIssuesFromServer();
 }
 
 function bindEvents() {
@@ -178,6 +181,71 @@ function clearStoredFilesOnce() {
 
 function saveIssues(issues) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sortIssues(issues)));
+}
+
+async function hydrateIssuesFromServer() {
+  if (typeof fetch !== "function") return;
+  await importLocalIssuesToServer();
+  await refreshIssuesFromServer();
+}
+
+async function importLocalIssuesToServer() {
+  if (localStorage.getItem(LOCAL_IMPORT_KEY) === "done" || !state.issues.length) return;
+  try {
+    await fetch("/api/issues/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ issues: state.issues }),
+    });
+    localStorage.setItem(LOCAL_IMPORT_KEY, "done");
+  } catch {
+    // Keep local cache if the server is unavailable.
+  }
+}
+
+async function refreshIssuesFromServer() {
+  if (typeof fetch !== "function") return;
+  try {
+    const response = await fetch("/api/issues");
+    if (!response.ok) return;
+    const payload = await response.json();
+    if (!Array.isArray(payload.issues)) return;
+    const previousSelection = state.selectedIssueId;
+    state.issues = sortIssues(payload.issues);
+    saveIssues(state.issues);
+    state.selectedIssueId = state.issues.some((issue) => issue.id === previousSelection)
+      ? previousSelection
+      : latestIssue()?.id || state.issues[0]?.id || null;
+    render();
+    syncIssuePolling();
+  } catch {
+    // Local cache remains usable when the server is temporarily unavailable.
+  }
+}
+
+async function refreshIssueFromServer(issueId) {
+  if (typeof fetch !== "function" || !issueId) return null;
+  try {
+    const response = await fetch(`/api/issue?issueId=${encodeURIComponent(issueId)}`);
+    if (!response.ok) return null;
+    const payload = await response.json();
+    if (!payload.issue) return null;
+    upsertIssue(payload.issue);
+    return payload.issue;
+  } catch {
+    return null;
+  }
+}
+
+function syncIssuePolling() {
+  const hasProcessingIssue = state.issues.some((issue) => ["processing", "queued"].includes(issue.status) || ["queued", "converting", "rendering"].includes(issue.conversionStatus));
+  if (hasProcessingIssue && !state.statusPollTimer) {
+    state.statusPollTimer = setInterval(refreshIssuesFromServer, 2000);
+  }
+  if (!hasProcessingIssue && state.statusPollTimer) {
+    clearInterval(state.statusPollTimer);
+    state.statusPollTimer = null;
+  }
 }
 
 function upsertIssue(issue) {
@@ -402,7 +470,7 @@ async function renderViewer() {
 
 function renderViewerMeta(issue, downloadUrl) {
   const fileExt = getFileExtension(issue);
-  const canFullscreen = Boolean(issue.previewUrl || fileExt === "PDF");
+  const canFullscreen = Boolean((Array.isArray(issue.pageUrls) && issue.pageUrls.length) || issue.previewUrl || fileExt === "PDF");
   const fullscreenAction = canFullscreen
     ? `
       <button class="meta-action" type="button" data-preview-fullscreen aria-label="全屏预览">
@@ -471,6 +539,54 @@ function renderPreview(issue, file, fileUrl = "") {
   const isSample = !file;
   const fileSizeText = formatFileSize(issue.fileSize);
   const pageUrls = Array.isArray(issue.pageUrls) ? issue.pageUrls : [];
+
+  if (issue.status === "processing" || ["queued", "converting", "rendering"].includes(issue.conversionStatus)) {
+    return `
+      <div class="preview-shell">
+        <div class="preview-stage">
+          <div class="fallback-card processing-card">
+            <div class="file-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="M8 14h8M8 18h5"/>
+              </svg>
+            </div>
+            <h3>${escapeHtml(getIssueProcessingTitle(issue))}</h3>
+            <p>${escapeHtml(issue.conversionMessage || "系统正在后台生成在线预览，完成后会自动更新。")}</p>
+            <div class="file-meta">
+              <span>${escapeHtml(issue.fileName)}</span>
+              <span>${fileSizeText}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (issue.status === "failed") {
+    return `
+      <div class="preview-shell">
+        <div class="preview-stage">
+          <div class="fallback-card">
+            <div class="file-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="M12 9v4M12 17h.01"/>
+              </svg>
+            </div>
+            <h3>预览生成失败</h3>
+            <p>${escapeHtml(issue.conversionMessage || "当前文件暂时无法生成在线预览，请下载原文件查看。")}</p>
+            <div class="file-meta">
+              <span>${escapeHtml(issue.fileName)}</span>
+              <span>${fileSizeText}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
   if (pageUrls.length) {
     return `
@@ -719,18 +835,17 @@ async function handleUpload(file) {
 
   try {
     const serverUpload = await uploadFileForPreview(issue.id, file, updateProgress);
-    Object.assign(issue, serverUpload);
-    await saveIssueFile(issue.id, file);
-    if (issue.isLatest) markLatestIssue("");
-    upsertIssue(issue);
-    state.selectedIssueId = issue.id;
-    if (issue.isLatest) markLatestIssue(issue.id);
+    const uploadedIssue = serverUpload.issue || { ...issue, ...serverUpload };
+    upsertIssue(uploadedIssue);
+    state.selectedIssueId = uploadedIssue.id;
     els.fileInput.value = "";
-    const previewReady = Array.isArray(issue.pageUrls) && issue.pageUrls.length;
-    setSelectedFile(file, previewReady ? "转换完成，可在线预览" : "上传成功，已保存", { progress: 100 });
-    setUploadStatus(previewReady ? "转换完成，可在线预览。" : "上传成功，已保存到历史归档。");
+    updateProgress({ phase: uploadedIssue.conversionStatus === "queued" ? "queued" : "rendering" });
+    setSelectedFile(file, "已上传，正在后台生成预览", { progress: 100 });
+    setUploadStatus("已上传，正在后台生成预览。");
     closeUploadDialog();
     render();
+    syncIssuePolling();
+    if (serverUpload.issue) waitForIssuePublish(uploadedIssue.id);
   } catch (error) {
     console.error(error);
     setSelectedFile(file, "上传失败");
@@ -778,6 +893,25 @@ async function deleteIssueAssets(issueId) {
   await fetch(`/api/issue?issueId=${encodeURIComponent(issueId)}`, { method: "DELETE" });
 }
 
+async function waitForIssuePublish(issueId) {
+  const maxAttempts = 180;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await delay(2000);
+    const issue = await refreshIssueFromServer(issueId);
+    if (!issue) continue;
+    render();
+    syncIssuePolling();
+    if (issue.status === "published") {
+      setUploadStatus("发布完成，可在线预览。");
+      return;
+    }
+    if (issue.status === "failed") {
+      setUploadStatus(issue.conversionMessage || "生成预览失败，请下载原文件查看。");
+      return;
+    }
+  }
+}
+
 async function uploadFileForPreview(issueId, file, onProgress) {
   if (typeof XMLHttpRequest === "function") {
     return uploadFileWithProgress(issueId, file, onProgress);
@@ -793,6 +927,11 @@ async function uploadFileForPreview(issueId, file, onProgress) {
   const params = new URLSearchParams({
     issueId,
     fileName: file.name,
+    insightType: state.insightType,
+    issueDate: els.issueDate.value,
+    fileType: file.type || inferFileType(file.name),
+    fileSize: String(file.size || 0),
+    isLatest: String(Boolean(els.markLatest.checked)),
   });
   const response = await fetch(`/api/upload?${params.toString()}`, {
     method: "POST",
@@ -816,8 +955,20 @@ function uploadFileWithProgress(issueId, file, onProgress) {
     const params = new URLSearchParams({
       issueId,
       fileName: file.name,
+      insightType: state.insightType,
+      issueDate: els.issueDate.value,
+      fileType: file.type || inferFileType(file.name),
+      fileSize: String(file.size || 0),
+      isLatest: String(Boolean(els.markLatest.checked)),
     });
     const request = new XMLHttpRequest();
+    let processingTimer = null;
+
+    const clearProcessingTimer = () => {
+      if (!processingTimer) return;
+      clearTimeout(processingTimer);
+      processingTimer = null;
+    };
 
     request.open("POST", `/api/upload?${params.toString()}`);
     request.setRequestHeader("Content-Type", file.type || "application/octet-stream");
@@ -834,9 +985,10 @@ function uploadFileWithProgress(issueId, file, onProgress) {
       });
     });
     request.upload.addEventListener("load", () => {
-      onProgress?.({ phase: "processing", loaded: file.size || 0, total: file.size || 0, percent: 100 });
+      onProgress?.({ phase: "queued", loaded: file.size || 0, total: file.size || 0, percent: 100 });
     });
     request.addEventListener("load", () => {
+      clearProcessingTimer();
       const payload = parseJsonResponse(request.responseText);
       if (request.status < 200 || request.status >= 300) {
         resolve({
@@ -847,8 +999,14 @@ function uploadFileWithProgress(issueId, file, onProgress) {
       }
       resolve(payload);
     });
-    request.addEventListener("error", () => reject(new Error("上传网络异常，请重试。")));
-    request.addEventListener("timeout", () => reject(new Error("上传超时，请重试。")));
+    request.addEventListener("error", () => {
+      clearProcessingTimer();
+      reject(new Error("上传网络异常，请重试。"));
+    });
+    request.addEventListener("timeout", () => {
+      clearProcessingTimer();
+      reject(new Error("上传超时，请重试。"));
+    });
     request.timeout = 360000;
     request.send(file);
   });
@@ -915,10 +1073,34 @@ function setSelectedFile(file, status, options = {}) {
 }
 
 function formatUploadProgress(progress, startedAt) {
-  if (progress.phase === "processing") {
+  if (progress.phase === "queued") {
     return {
-      label: "上传完成，正在生成高清预览...",
-      message: "上传完成，正在生成高清预览...",
+      label: "上传完成，等待后台处理...",
+      message: "上传完成，等待后台处理...",
+      progress: 100,
+    };
+  }
+
+  if (progress.phase === "converting") {
+    return {
+      label: "上传完成，正在转换 PPT...",
+      message: "上传完成，正在转换 PPT...",
+      progress: 100,
+    };
+  }
+
+  if (progress.phase === "rendering") {
+    return {
+      label: "正在生成高清预览...",
+      message: "正在生成高清预览...",
+      progress: 100,
+    };
+  }
+
+  if (progress.phase === "published") {
+    return {
+      label: "发布完成",
+      message: "发布完成",
       progress: 100,
     };
   }
@@ -954,6 +1136,10 @@ function formatRemainingUploadTime(loaded, total, startedAt) {
    Utils
    ============================================ */
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function formatFileSize(bytes) {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -976,6 +1162,15 @@ function formatMonthLabel(monthKey) {
 }
 
 function getIssuePreviewStatus(issue) {
+  if (issue.status === "processing" || issue.conversionStatus === "queued") {
+    return { label: "处理中", className: "pending" };
+  }
+  if (issue.conversionStatus === "converting") {
+    return { label: "转换中", className: "pending" };
+  }
+  if (issue.conversionStatus === "rendering") {
+    return { label: "生成预览中", className: "pending" };
+  }
   if (Array.isArray(issue.pageUrls) && issue.pageUrls.length) {
     return { label: "可在线预览", className: "ready" };
   }
@@ -989,6 +1184,12 @@ function getIssuePreviewStatus(issue) {
     return { label: "需下载查看", className: "failed" };
   }
   return { label: "已归档", className: "" };
+}
+
+function getIssueProcessingTitle(issue) {
+  if (issue.conversionStatus === "converting") return "正在转换 PPT";
+  if (issue.conversionStatus === "rendering") return "正在生成高清预览";
+  return "等待后台处理";
 }
 
 function escapeHtml(value) {
