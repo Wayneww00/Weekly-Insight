@@ -1,0 +1,16 @@
+{
+  "name": "weekly-insight",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-static.js",
+    "dev": "node server.js",
+    "start": "node server.js",
+    "test": "node --test tests/app.test.js",
+    "check": "node --check server.js && node --check src/app.js && node --check api/issues.js && node --check api/issue.js && node --check api/issues/import.js && node --check api/upload.js && node --check api/worker/claim.js && node --check api/worker/status.js && node --check api/worker/complete.js && node --check worker/conversion-worker.js"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.21.0",
+    "@vercel/blob": "^2.0.0"
+  }
+}

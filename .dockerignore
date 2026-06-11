@@ -1,0 +1,12 @@
+node_modules
+.git
+.vercel
+data
+dist
+tests
+screenshots
+screenshot-*.png
+.env*
+api
+worker
+docs

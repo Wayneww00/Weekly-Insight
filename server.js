@@ -2,7 +2,9 @@ const http = require("node:http");
 const { execFile } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const { promisify } = require("node:util");
+const { Storage } = require("@google-cloud/storage");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
@@ -10,7 +12,11 @@ const dataRoot = path.join(root, "data");
 const uploadsRoot = path.join(dataRoot, "uploads");
 const dbPath = path.join(dataRoot, "db.json");
 const previewDpi = Number(process.env.PREVIEW_DPI || 300);
+const conversionTimeoutMs = Number(process.env.CONVERSION_TIMEOUT_MS || 900000);
+const gcsBucketName = process.env.GCS_BUCKET || "";
+const isCloudStorageEnabled = Boolean(gcsBucketName);
 const execFileAsync = promisify(execFile);
+const storage = isCloudStorageEnabled ? new Storage() : null;
 
 const conversionQueue = [];
 let conversionRunning = false;
@@ -52,8 +58,28 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/api/upload/initiate") {
+      await handleUploadInitiateRequest(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/upload/complete") {
+      await handleUploadCompleteRequest(request, response);
+      return;
+    }
+
     if (request.method === "DELETE" && url.pathname === "/api/issue") {
       await handleDeleteIssueRequest(url, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/issue/retry") {
+      await handleRetryIssueRequest(url, response);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/storage/")) {
+      await serveStorageObject(url, response);
       return;
     }
 
@@ -102,73 +128,38 @@ async function handleImportIssuesRequest(request, response) {
 }
 
 async function handleUploadRequest(request, url, response) {
-  const issueId = sanitizeSegment(url.searchParams.get("issueId") || "");
-  const rawFileName = url.searchParams.get("fileName") || "upload.bin";
-  const fileName = sanitizeFileName(rawFileName);
-  const insightType = url.searchParams.get("insightType") === "monthly" ? "monthly" : "weekly";
-  const issueDate = sanitizeDate(url.searchParams.get("issueDate") || "");
-  const fileType = url.searchParams.get("fileType") || mimeTypes[path.extname(fileName).toLowerCase()] || "application/octet-stream";
-  const fileSize = Number(url.searchParams.get("fileSize") || 0);
-  const isLatest = url.searchParams.get("isLatest") === "true";
+  const uploadMetadata = normalizeUploadMetadata({
+    issueId: url.searchParams.get("issueId"),
+    fileName: url.searchParams.get("fileName"),
+    insightType: url.searchParams.get("insightType"),
+    issueDate: url.searchParams.get("issueDate"),
+    fileType: url.searchParams.get("fileType"),
+    fileSize: url.searchParams.get("fileSize"),
+    isLatest: url.searchParams.get("isLatest"),
+  });
 
-  if (!issueId || !fileName || !issueDate) {
-    writeJson(response, 400, { error: "Missing issue id, file name, or issue date." });
+  if (uploadMetadata.error) {
+    writeJson(response, uploadMetadata.statusCode, { error: uploadMetadata.error });
     return;
   }
 
-  const ext = path.extname(fileName).toLowerCase();
-  if (![".ppt", ".pptx", ".pdf"].includes(ext)) {
-    writeJson(response, 400, { error: "Unsupported file type." });
-    return;
-  }
-
-  const uploadDir = path.join(uploadsRoot, issueId);
-  const originalPath = path.join(uploadDir, fileName);
-  const now = new Date().toISOString();
-  const originalUrl = `/data/uploads/${issueId}/${encodeURIComponent(fileName)}`;
-  const issue = {
-    id: issueId,
-    title: generateIssueTitle(issueDate, insightType),
-    insightType,
-    issueDate,
-    category: "",
-    summary: "",
-    tags: [],
-    fileName,
-    fileType,
-    fileSize,
-    originalUrl,
-    previewUrl: "",
-    pageUrls: [],
-    conversionStatus: "queued",
-    conversionMessage: "已上传，等待生成在线预览。",
-    status: "processing",
-    uploaderId: "local-user",
-    publishedAt: "",
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: "",
-    isLatest,
-  };
+  const { issue, originalObjectName, uploadDir, originalPath } = buildUploadIssue(uploadMetadata);
 
   try {
-    await fs.promises.mkdir(uploadDir, { recursive: true });
-    await writeRequestBody(request, originalPath);
-    await upsertIssue(issue);
-    await upsertAsset({
-      id: `${issueId}-original`,
-      issueId,
-      type: "original",
-      url: originalUrl,
-      pageNumber: null,
-      mimeType: fileType,
-      size: fileSize,
-      createdAt: now,
-    });
-    enqueueConversion(issueId);
+    if (isCloudStorageEnabled) {
+      const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), `insight-upload-${issue.id}-`));
+      const tempPath = path.join(tempDir, issue.fileName);
+      await writeRequestBody(request, tempPath);
+      await uploadFileToStorage(tempPath, originalObjectName, issue.fileType);
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    } else {
+      await fs.promises.mkdir(uploadDir, { recursive: true });
+      await writeRequestBody(request, originalPath);
+    }
+    await registerUploadedIssue(issue);
     writeJson(response, 202, { issue });
   } catch (error) {
-    await updateIssue(issueId, {
+    await updateIssue(issue.id, {
       status: "failed",
       conversionStatus: "failed",
       conversionMessage: error.message,
@@ -180,6 +171,141 @@ async function handleUploadRequest(request, url, response) {
       conversionMessage: error.message,
     });
   }
+}
+
+async function handleUploadInitiateRequest(request, response) {
+  if (!isCloudStorageEnabled) {
+    writeJson(response, 400, { error: "Direct cloud upload is not configured." });
+    return;
+  }
+
+  const payload = await readJsonBody(request);
+  const uploadMetadata = normalizeUploadMetadata(payload);
+  if (uploadMetadata.error) {
+    writeJson(response, uploadMetadata.statusCode, { error: uploadMetadata.error });
+    return;
+  }
+
+  const { issue, originalObjectName } = buildUploadIssue(uploadMetadata);
+  const file = bucket().file(originalObjectName);
+  const [uploadUrl] = await file.createResumableUpload({
+    origin: request.headers.origin || undefined,
+    metadata: {
+      contentType: uploadMetadata.fileType,
+      cacheControl: "public, max-age=31536000, immutable",
+    },
+  });
+
+  writeJson(response, 200, {
+    uploadUrl,
+    issue,
+  });
+}
+
+async function handleUploadCompleteRequest(request, response) {
+  const payload = await readJsonBody(request);
+  const uploadMetadata = normalizeUploadMetadata(payload);
+  if (uploadMetadata.error) {
+    writeJson(response, uploadMetadata.statusCode, { error: uploadMetadata.error });
+    return;
+  }
+
+  const { issue, originalObjectName } = buildUploadIssue(uploadMetadata);
+  if (isCloudStorageEnabled) {
+    const file = bucket().file(originalObjectName);
+    const [exists] = await file.exists();
+    if (!exists) {
+      writeJson(response, 404, { error: "Uploaded file was not found in storage." });
+      return;
+    }
+  }
+
+  await registerUploadedIssue(issue);
+  writeJson(response, 202, { issue });
+}
+
+function normalizeUploadMetadata(raw = {}) {
+  const issueId = sanitizeSegment(raw.issueId || "");
+  const fileName = sanitizeFileName(raw.fileName || "upload.bin");
+  const insightType = raw.insightType === "monthly" ? "monthly" : "weekly";
+  const issueDate = sanitizeDate(raw.issueDate || "");
+  const fileType = raw.fileType || mimeTypes[path.extname(fileName).toLowerCase()] || "application/octet-stream";
+  const fileSize = Number(raw.fileSize || 0);
+  const isLatest = raw.isLatest === true || raw.isLatest === "true";
+
+  if (!issueId || !fileName || !issueDate) {
+    return { error: "Missing issue id, file name, or issue date.", statusCode: 400 };
+  }
+
+  const ext = path.extname(fileName).toLowerCase();
+  if (![".ppt", ".pptx", ".pdf"].includes(ext)) {
+    return { error: "Unsupported file type.", statusCode: 400 };
+  }
+
+  return {
+    issueId,
+    fileName,
+    insightType,
+    issueDate,
+    fileType,
+    fileSize,
+    isLatest,
+  };
+}
+
+function buildUploadIssue(uploadMetadata) {
+  const uploadDir = path.join(uploadsRoot, uploadMetadata.issueId);
+  const originalPath = path.join(uploadDir, uploadMetadata.fileName);
+  const originalObjectName = `uploads/${uploadMetadata.issueId}/original/${uploadMetadata.fileName}`;
+  const now = new Date().toISOString();
+  const originalUrl = isCloudStorageEnabled
+    ? storageUrl(originalObjectName)
+    : `/data/uploads/${uploadMetadata.issueId}/${encodeURIComponent(uploadMetadata.fileName)}`;
+
+  return {
+    uploadDir,
+    originalPath,
+    originalObjectName,
+    issue: {
+      id: uploadMetadata.issueId,
+      title: generateIssueTitle(uploadMetadata.issueDate, uploadMetadata.insightType),
+      insightType: uploadMetadata.insightType,
+      issueDate: uploadMetadata.issueDate,
+      category: "",
+      summary: "",
+      tags: [],
+      fileName: uploadMetadata.fileName,
+      fileType: uploadMetadata.fileType,
+      fileSize: uploadMetadata.fileSize,
+      originalUrl,
+      previewUrl: "",
+      pageUrls: [],
+      conversionStatus: "queued",
+      conversionMessage: "已上传，等待生成在线预览。",
+      status: "processing",
+      uploaderId: "local-user",
+      publishedAt: "",
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: "",
+      isLatest: uploadMetadata.isLatest,
+    },
+  };
+}
+
+async function registerUploadedIssue(issue) {
+  await upsertIssue(issue);
+  await upsertAsset({
+    id: `${issue.id}-original`,
+    issueId: issue.id,
+    type: "original",
+    url: issue.originalUrl,
+    pageNumber: null,
+    mimeType: issue.fileType,
+    size: issue.fileSize,
+    createdAt: issue.createdAt,
+  });
+  enqueueConversion(issue.id);
 }
 
 async function handleDeleteIssueRequest(url, response) {
@@ -205,6 +331,32 @@ async function handleDeleteIssueRequest(url, response) {
     if (nextLatest) nextLatest.isLatest = true;
   });
   writeJson(response, 200, { ok: true });
+}
+
+async function handleRetryIssueRequest(url, response) {
+  const issueId = sanitizeSegment(url.searchParams.get("issueId") || "");
+
+  if (!issueId) {
+    writeJson(response, 400, { error: "Missing issue id." });
+    return;
+  }
+
+  const db = await readDb();
+  const issue = db.issues.find((item) => item.id === issueId && !item.deletedAt);
+  if (!issue) {
+    writeJson(response, 404, { error: "Issue not found." });
+    return;
+  }
+
+  await updateIssue(issueId, {
+    status: "processing",
+    conversionStatus: "queued",
+    conversionMessage: "已重新排队生成在线预览。",
+    pageUrls: [],
+    updatedAt: new Date().toISOString(),
+  });
+  enqueueConversion(issueId);
+  writeJson(response, 202, { ok: true });
 }
 
 function enqueueConversion(issueId) {
@@ -238,11 +390,19 @@ async function processConversion(issueId) {
   const issue = db.issues.find((item) => item.id === issueId && !item.deletedAt);
   if (!issue) return;
 
-  const uploadDir = path.join(uploadsRoot, issueId);
+  const workspace = isCloudStorageEnabled
+    ? await fs.promises.mkdtemp(path.join(os.tmpdir(), `insight-convert-${issueId}-`))
+    : path.join(uploadsRoot, issueId);
+  const uploadDir = workspace;
   const originalPath = path.join(uploadDir, issue.fileName);
   const ext = path.extname(issue.fileName).toLowerCase();
   let previewUrl = ext === ".pdf" ? issue.originalUrl : "";
   let pdfPath = ext === ".pdf" ? originalPath : "";
+
+  if (isCloudStorageEnabled) {
+    await fs.promises.mkdir(uploadDir, { recursive: true });
+    await downloadStorageObject(`uploads/${issueId}/original/${issue.fileName}`, originalPath);
+  }
 
   if (ext === ".ppt" || ext === ".pptx") {
     await updateIssue(issueId, {
@@ -261,7 +421,14 @@ async function processConversion(issueId) {
       });
       return;
     }
-    previewUrl = `/data/uploads/${issueId}/${conversion.previewUrl}`;
+    const convertedName = decodeURIComponent(path.basename(conversion.previewUrl));
+    const convertedObjectName = `uploads/${issueId}/preview/${convertedName}`;
+    if (isCloudStorageEnabled) {
+      await uploadFileToStorage(path.join(uploadDir, convertedName), convertedObjectName, "application/pdf");
+      previewUrl = storageUrl(convertedObjectName);
+    } else {
+      previewUrl = `/data/uploads/${issueId}/${conversion.previewUrl}`;
+    }
     pdfPath = path.join(uploadDir, decodeURIComponent(path.basename(conversion.previewUrl)));
     const pdfStat = await fs.promises.stat(pdfPath).catch(() => null);
     await upsertAsset({
@@ -308,6 +475,10 @@ async function processConversion(issueId) {
       });
     });
   });
+
+  if (isCloudStorageEnabled) {
+    await fs.promises.rm(workspace, { recursive: true, force: true });
+  }
 }
 
 async function renderPdfPages(pdfPath, uploadDir, issueId) {
@@ -315,13 +486,27 @@ async function renderPdfPages(pdfPath, uploadDir, issueId) {
   await fs.promises.rm(pagesDir, { recursive: true, force: true });
   await fs.promises.mkdir(pagesDir, { recursive: true });
 
-  await execFileAsync("pdftoppm", ["-png", "-r", String(previewDpi), pdfPath, path.join(pagesDir, "page")], {
-    timeout: 300000,
-  });
+  try {
+    await execFileAsync("pdftoppm", ["-png", "-r", String(previewDpi), pdfPath, path.join(pagesDir, "page")], {
+      timeout: conversionTimeoutMs,
+    });
+  } catch (error) {
+    throw enrichCommandError("PDF 页面渲染失败", error);
+  }
 
   const pageFiles = (await fs.promises.readdir(pagesDir))
     .filter((fileName) => /^page-\d+\.png$/.test(fileName))
     .sort((a, b) => Number(a.match(/\d+/)?.[0] || 0) - Number(b.match(/\d+/)?.[0] || 0));
+
+  if (isCloudStorageEnabled) {
+    const urls = [];
+    for (const fileName of pageFiles) {
+      const objectName = `uploads/${issueId}/pages/${fileName}`;
+      await uploadFileToStorage(path.join(pagesDir, fileName), objectName, "image/png");
+      urls.push(storageUrl(objectName));
+    }
+    return urls;
+  }
 
   return pageFiles.map((fileName) => `/data/uploads/${issueId}/pages/${encodeURIComponent(fileName)}`);
 }
@@ -370,7 +555,7 @@ async function convertPresentationToPdf(originalPath, uploadDir) {
 
   try {
     await execFileAsync(soffice, ["--headless", "--convert-to", "pdf", "--outdir", uploadDir, originalPath], {
-      timeout: 300000,
+      timeout: conversionTimeoutMs,
     });
     const convertedName = `${path.basename(originalPath, path.extname(originalPath))}.pdf`;
     const convertedPath = path.join(uploadDir, convertedName);
@@ -383,10 +568,23 @@ async function convertPresentationToPdf(originalPath, uploadDir) {
   } catch (error) {
     return {
       status: "failed",
-      message: `PPT 转换失败：${error.message}`,
+      message: enrichCommandError("PPT 转 PDF 失败", error).message,
       previewUrl: "",
     };
   }
+}
+
+function enrichCommandError(label, error) {
+  const details = [
+    label,
+    error.killed ? "进程被超时终止。" : "",
+    error.signal ? `signal=${error.signal}` : "",
+    error.code ? `exitCode=${error.code}` : "",
+    error.stderr ? `stderr=${String(error.stderr).trim()}` : "",
+    error.stdout ? `stdout=${String(error.stdout).trim()}` : "",
+    error.message,
+  ].filter(Boolean);
+  return new Error(details.join(" "));
 }
 
 async function findSoffice() {
@@ -411,6 +609,7 @@ async function findSoffice() {
 }
 
 async function ensureDb() {
+  if (isCloudStorageEnabled) return;
   await fs.promises.mkdir(dataRoot, { recursive: true });
   await fs.promises.mkdir(uploadsRoot, { recursive: true });
   try {
@@ -421,6 +620,22 @@ async function ensureDb() {
 }
 
 async function readDb() {
+  if (isCloudStorageEnabled) {
+    const file = bucket().file("db/insight-db.json");
+    const [exists] = await file.exists();
+    if (!exists) return { issues: [], assets: [] };
+    const [raw] = await file.download();
+    try {
+      const parsed = JSON.parse(raw.toString("utf8"));
+      return {
+        issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+        assets: Array.isArray(parsed.assets) ? parsed.assets : [],
+      };
+    } catch {
+      return { issues: [], assets: [] };
+    }
+  }
+
   await ensureDb();
   const raw = await fs.promises.readFile(dbPath, "utf8");
   try {
@@ -435,6 +650,17 @@ async function readDb() {
 }
 
 async function writeDb(db) {
+  if (isCloudStorageEnabled) {
+    await bucket().file("db/insight-db.json").save(JSON.stringify({
+      issues: sortIssues(db.issues || []),
+      assets: db.assets || [],
+    }, null, 2), {
+      contentType: "application/json; charset=utf-8",
+      resumable: false,
+    });
+    return;
+  }
+
   await ensureDb();
   await fs.promises.writeFile(dbPath, JSON.stringify({
     issues: sortIssues(db.issues || []),
@@ -553,6 +779,59 @@ function serveStatic(request, response) {
   });
 }
 
+async function serveStorageObject(url, response) {
+  if (!isCloudStorageEnabled) {
+    response.writeHead(404);
+    response.end("Not found");
+    return;
+  }
+
+  const objectName = decodeURIComponent(url.pathname.replace(/^\/storage\//, ""));
+  if (!objectName || objectName.includes("..")) {
+    response.writeHead(400);
+    response.end("Bad request");
+    return;
+  }
+
+  const file = bucket().file(objectName);
+  const [exists] = await file.exists();
+  if (!exists) {
+    response.writeHead(404);
+    response.end("Not found");
+    return;
+  }
+
+  const [metadata] = await file.getMetadata();
+  response.writeHead(200, {
+    "Content-Type": metadata.contentType || mimeTypes[path.extname(objectName)] || "application/octet-stream",
+    "Cache-Control": "public, max-age=31536000, immutable",
+  });
+  file.createReadStream().pipe(response);
+}
+
+function bucket() {
+  return storage.bucket(gcsBucketName);
+}
+
+async function uploadFileToStorage(filePath, objectName, contentType) {
+  await bucket().upload(filePath, {
+    destination: objectName,
+    resumable: false,
+    metadata: {
+      contentType,
+      cacheControl: "public, max-age=31536000, immutable",
+    },
+  });
+}
+
+async function downloadStorageObject(objectName, filePath) {
+  await bucket().file(objectName).download({ destination: filePath });
+}
+
+function storageUrl(objectName) {
+  return `/storage/${objectName.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 function generateIssueTitle(issueDate, insightType) {
   if (!issueDate) return insightType === "weekly" ? "Weekly Insights" : "Monthly Insights";
   if (insightType === "monthly") return `${issueDate.slice(0, 7)} Monthly Insights`;
@@ -587,7 +866,7 @@ function writeJson(response, statusCode, payload) {
 }
 
 ensureDb().then(() => {
-  server.listen(port, "127.0.0.1", () => {
-    console.log(`Insight Hub running at http://127.0.0.1:${port}`);
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`Insight Hub running at http://0.0.0.0:${port}`);
   });
 });

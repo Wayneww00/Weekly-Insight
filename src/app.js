@@ -5,10 +5,11 @@
 const STORAGE_KEY = "insight-hub:issues";
 const EMPTY_LIBRARY_RESET_KEY = "insight-hub:empty-library-reset-2026-06-10";
 const FILE_STORE_RESET_KEY = "insight-hub:file-store-reset-2026-06-10";
-const LOCAL_IMPORT_KEY = "insight-hub:local-imported-to-server-2026-06-11";
+const SERVER_TRUTH_RESET_KEY = "insight-hub:server-truth-reset-2026-06-11";
 const DB_NAME = "insight-hub";
 const STORE_NAME = "files";
 const DB_VERSION = 1;
+const DIRECT_SERVER_UPLOAD_LIMIT = 20 * 1024 * 1024;
 
 const state = {
   issues: loadIssues(),
@@ -149,6 +150,12 @@ function closeSidebar() {
    ============================================ */
 
 function loadIssues() {
+  if (localStorage.getItem(SERVER_TRUTH_RESET_KEY) !== "done") {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(SERVER_TRUTH_RESET_KEY, "done");
+    return [];
+  }
+
   if (localStorage.getItem(EMPTY_LIBRARY_RESET_KEY) !== "done") {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.setItem(EMPTY_LIBRARY_RESET_KEY, "done");
@@ -185,22 +192,7 @@ function saveIssues(issues) {
 
 async function hydrateIssuesFromServer() {
   if (typeof fetch !== "function") return;
-  await importLocalIssuesToServer();
   await refreshIssuesFromServer();
-}
-
-async function importLocalIssuesToServer() {
-  if (localStorage.getItem(LOCAL_IMPORT_KEY) === "done" || !state.issues.length) return;
-  try {
-    await fetch("/api/issues/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ issues: state.issues }),
-    });
-    localStorage.setItem(LOCAL_IMPORT_KEY, "done");
-  } catch {
-    // Keep local cache if the server is unavailable.
-  }
 }
 
 async function refreshIssuesFromServer() {
@@ -849,7 +841,7 @@ async function handleUpload(file) {
   } catch (error) {
     console.error(error);
     setSelectedFile(file, "上传失败");
-    setUploadStatus("文件保存失败，请重试或检查浏览器存储空间。");
+    setUploadStatus(error.message || "文件保存失败，请重试或检查网络连接。");
   }
 }
 
@@ -913,18 +905,20 @@ async function waitForIssuePublish(issueId) {
 }
 
 async function uploadFileForPreview(issueId, file, onProgress) {
-  if (typeof XMLHttpRequest === "function") {
+  if (typeof fetch !== "function") {
+    throw new Error("无法连接服务器，请刷新页面后重试。");
+  }
+
+  try {
+    return await uploadFileToCloudStorage(issueId, file, onProgress);
+  } catch (error) {
+    if (!shouldFallbackToServerUpload(error, file)) throw error;
     return uploadFileWithProgress(issueId, file, onProgress);
   }
+}
 
-  if (typeof fetch !== "function") {
-    return {
-      conversionStatus: "local",
-      conversionMessage: "当前环境未连接本地预览服务，已保留浏览器本地预览/下载。",
-    };
-  }
-
-  const params = new URLSearchParams({
+function buildUploadMetadata(issueId, file) {
+  return {
     issueId,
     fileName: file.name,
     insightType: state.insightType,
@@ -932,7 +926,76 @@ async function uploadFileForPreview(issueId, file, onProgress) {
     fileType: file.type || inferFileType(file.name),
     fileSize: String(file.size || 0),
     isLatest: String(Boolean(els.markLatest.checked)),
+  };
+}
+
+async function uploadFileToCloudStorage(issueId, file, onProgress) {
+  const metadata = buildUploadMetadata(issueId, file);
+  const initiateResponse = await fetch("/api/upload/initiate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(metadata),
   });
+  const initiatePayload = await initiateResponse.json().catch(() => ({}));
+  if (!initiateResponse.ok) {
+    const error = new Error(initiatePayload.error || "无法创建云端上传会话。");
+    error.status = initiateResponse.status;
+    throw error;
+  }
+
+  await uploadToResumableUrl(initiatePayload.uploadUrl, file, onProgress);
+  onProgress?.({ phase: "queued", loaded: file.size || 0, total: file.size || 0, percent: 100 });
+
+  const completeResponse = await fetch("/api/upload/complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(metadata),
+  });
+  const completePayload = await completeResponse.json().catch(() => ({}));
+  if (!completeResponse.ok) {
+    throw new Error(completePayload.error || "文件已上传，但登记发布失败，请重试。");
+  }
+  return completePayload;
+}
+
+function shouldFallbackToServerUpload(error, file) {
+  if ((file.size || 0) > DIRECT_SERVER_UPLOAD_LIMIT) return false;
+  return error?.status === 400 || error?.status === 404;
+}
+
+function uploadToResumableUrl(uploadUrl, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", uploadUrl);
+    request.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) {
+        onProgress?.({ phase: "uploading", loaded: 0, total: file.size || 0, indeterminate: true });
+        return;
+      }
+      onProgress?.({
+        phase: "uploading",
+        loaded: event.loaded,
+        total: event.total,
+        percent: Math.round((event.loaded / event.total) * 100),
+      });
+    });
+    request.addEventListener("load", () => {
+      if (request.status >= 200 && request.status < 300) {
+        resolve();
+        return;
+      }
+      reject(new Error(`云端上传失败（${request.status || "网络异常"}），请重试。`));
+    });
+    request.addEventListener("error", () => reject(new Error("云端上传网络异常，请重试。")));
+    request.addEventListener("timeout", () => reject(new Error("云端上传超时，请重试。")));
+    request.timeout = 900000;
+    request.send(file);
+  });
+}
+
+async function uploadFileWithFetch(issueId, file) {
+  const params = new URLSearchParams(buildUploadMetadata(issueId, file));
   const response = await fetch(`/api/upload?${params.toString()}`, {
     method: "POST",
     headers: {
@@ -942,25 +1005,14 @@ async function uploadFileForPreview(issueId, file, onProgress) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    return {
-      conversionStatus: "failed",
-      conversionMessage: payload.conversionMessage || payload.error || "上传到本地预览服务失败。",
-    };
+    throw new Error(payload.conversionMessage || payload.error || "上传到服务器失败，请重试。");
   }
   return payload;
 }
 
 function uploadFileWithProgress(issueId, file, onProgress) {
   return new Promise((resolve, reject) => {
-    const params = new URLSearchParams({
-      issueId,
-      fileName: file.name,
-      insightType: state.insightType,
-      issueDate: els.issueDate.value,
-      fileType: file.type || inferFileType(file.name),
-      fileSize: String(file.size || 0),
-      isLatest: String(Boolean(els.markLatest.checked)),
-    });
+    const params = new URLSearchParams(buildUploadMetadata(issueId, file));
     const request = new XMLHttpRequest();
     let processingTimer = null;
 
@@ -991,10 +1043,7 @@ function uploadFileWithProgress(issueId, file, onProgress) {
       clearProcessingTimer();
       const payload = parseJsonResponse(request.responseText);
       if (request.status < 200 || request.status >= 300) {
-        resolve({
-          conversionStatus: "failed",
-          conversionMessage: payload.conversionMessage || payload.error || "上传到本地预览服务失败。",
-        });
+        reject(new Error(payload.conversionMessage || payload.error || "上传到服务器失败，请重试。"));
         return;
       }
       resolve(payload);

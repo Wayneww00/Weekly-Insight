@@ -1,2 +1,9 @@
 data/uploads/
 data/db.json
+node_modules/
+.env.local
+.env.*.local
+.vercel/
+dist/
+.vercel
+.env*.local

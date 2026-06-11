@@ -16,7 +16,39 @@ function createElement() {
   };
 }
 
-function loadApp() {
+function createSuccessfulUploadXHR() {
+  return class SuccessfulUploadXHR {
+    constructor() {
+      this.status = 200;
+      this.responseText = "";
+      this.upload = { addEventListener: (event, callback) => { this[`upload_${event}`] = callback; } };
+    }
+
+    open(method, url) {
+      this.method = method;
+      this.url = url;
+    }
+
+    setRequestHeader() {}
+
+    addEventListener(event, callback) {
+      this[`event_${event}`] = callback;
+    }
+
+    send(file) {
+      setTimeout(() => {
+        this.upload_progress?.({
+          lengthComputable: true,
+          loaded: file?.size || 0,
+          total: file?.size || 0,
+        });
+        this.event_load?.();
+      }, 0);
+    }
+  };
+}
+
+function loadApp(options = {}) {
   const elements = new Map();
   const document = {
     querySelector(selector) {
@@ -84,12 +116,17 @@ function loadApp() {
 
   const code = fs.readFileSync(path.join(__dirname, "..", "src", "app.js"), "utf8");
   const context = {
-    console,
+    console: options.console || { ...console, error() {} },
     document,
     indexedDB,
     localStorage,
-    setTimeout,
+    setTimeout: (callback) => setTimeout(callback, 0),
+    setInterval: () => 1,
+    clearInterval() {},
     URL: { createObjectURL: () => "blob:test", revokeObjectURL() {} },
+    URLSearchParams,
+    fetch: options.fetch,
+    XMLHttpRequest: options.XMLHttpRequest || createSuccessfulUploadXHR(),
   };
   vm.createContext(context);
   vm.runInContext(
@@ -165,7 +202,96 @@ test("accepts only ppt, pptx, and pdf uploads by extension", () => {
 });
 
 test("upload creates a dated issue without category or summary fields", async () => {
-  const app = loadApp();
+  const app = loadApp({
+    fetch: async (url) => {
+      if (String(url).startsWith("/api/issue")) {
+        return {
+          ok: true,
+          json: async () => ({
+            issue: {
+              id: "server-upload-1",
+              title: "2026-06-09 Weekly Insights",
+              insightType: "weekly",
+              issueDate: "2026-06-09",
+              category: "",
+              summary: "",
+              tags: [],
+              fileName: "weekly-insight.pdf",
+              fileType: "application/pdf",
+              fileSize: 2048,
+              originalUrl: "/storage/uploads/server-upload-1/original/weekly-insight.pdf",
+              previewUrl: "",
+              pageUrls: [],
+              conversionStatus: "ready",
+              conversionMessage: "发布完成，可在线预览。",
+              status: "published",
+              createdAt: "2026-06-09T00:00:00.000Z",
+              updatedAt: "2026-06-09T00:00:00.000Z",
+              isLatest: true,
+            },
+          }),
+        };
+      }
+      if (String(url) === "/api/upload/initiate") {
+        return {
+          ok: true,
+          json: async () => ({
+            uploadUrl: "https://storage.googleapis.com/upload-session",
+            issue: {
+              id: "server-upload-1",
+              title: "2026-06-09 Weekly Insights",
+              insightType: "weekly",
+              issueDate: "2026-06-09",
+              category: "",
+              summary: "",
+              tags: [],
+              fileName: "weekly-insight.pdf",
+              fileType: "application/pdf",
+              fileSize: 2048,
+              originalUrl: "/storage/uploads/server-upload-1/original/weekly-insight.pdf",
+              previewUrl: "",
+              pageUrls: [],
+              conversionStatus: "queued",
+              conversionMessage: "已上传，等待生成在线预览。",
+              status: "processing",
+              createdAt: "2026-06-09T00:00:00.000Z",
+              updatedAt: "2026-06-09T00:00:00.000Z",
+              isLatest: true,
+            },
+          }),
+        };
+      }
+      if (String(url) === "/api/upload/complete") {
+        return {
+          ok: true,
+          json: async () => ({
+            issue: {
+              id: "server-upload-1",
+              title: "2026-06-09 Weekly Insights",
+              insightType: "weekly",
+              issueDate: "2026-06-09",
+              category: "",
+              summary: "",
+              tags: [],
+              fileName: "weekly-insight.pdf",
+              fileType: "application/pdf",
+              fileSize: 2048,
+              originalUrl: "/storage/uploads/server-upload-1/original/weekly-insight.pdf",
+              previewUrl: "",
+              pageUrls: [],
+              conversionStatus: "queued",
+              conversionMessage: "已上传，等待生成在线预览。",
+              status: "processing",
+              createdAt: "2026-06-09T00:00:00.000Z",
+              updatedAt: "2026-06-09T00:00:00.000Z",
+              isLatest: true,
+            },
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ issues: [] }) };
+    },
+  });
   app.els.issueDate.value = "2026-06-09";
   app.els.markLatest.checked = true;
 
@@ -183,6 +309,31 @@ test("upload creates a dated issue without category or summary fields", async ()
   assert.equal(app.state.issues.filter((issue) => issue.isLatest).length, 1);
   assert.equal(app.els.selectedFile.hidden, false);
   assert.equal(app.els.selectedFile.innerHTML.includes("weekly-insight.pdf"), true);
+});
+
+test("failed server upload does not create a fake local issue", async () => {
+  const app = loadApp({
+    fetch: async (url) => {
+      if (String(url) === "/api/upload/initiate") {
+        return {
+          ok: false,
+          json: async () => ({ error: "Upload failed." }),
+        };
+      }
+      return { ok: true, json: async () => ({ issues: [] }) };
+    },
+  });
+  app.els.issueDate.value = "2026-04-30";
+  app.els.markLatest.checked = true;
+
+  await app.handleUpload({
+    name: "Market Trends (Apr 2026).pdf",
+    type: "application/pdf",
+    size: 38300000,
+  });
+
+  assert.equal(app.state.issues.some((issue) => issue.fileName === "Market Trends (Apr 2026).pdf"), false);
+  assert.equal(app.els.uploadStatus.textContent, "Upload failed.");
 });
 
 test("selected upload file can show progress feedback", () => {

@@ -157,6 +157,17 @@ AI 功能不是 MVP 必需项，但建议作为 v1.1 增强能力。
 5. **Admin Console**：提供上传、发布、编辑、删除、重试转换、权限管理。
 6. **Search Index**：索引标题、摘要、标签、正文文本，后续可扩展向量检索。
 
+### Vercel Production Architecture
+
+生产版采用“Vercel 前台 + 对象存储 + 独立转换 worker”的架构：
+
+- **Vercel Static/App API**：托管前端页面和轻量 API，负责上传入口、列表读取、删除、状态查询和 worker 回调。
+- **Vercel Blob**：保存原始 PPT/PDF、PPT 转换后的 PDF、每页高清 PNG 预览，以及 MVP 阶段的轻量元数据 JSON。
+- **Independent Conversion Worker**：运行在具备 LibreOffice 与 Poppler 的独立机器上，负责领取转换任务、下载原文件、转换 PDF、生成高清页面图、上传产物并回写状态。
+- **Async Status Flow**：用户上传后立即创建 `processing/queued` 记录；worker 依次回写 `converting`、`rendering`、`ready/failed`，前端轮询展示进度。
+
+该路线避免在 Vercel Serverless Function 内执行长时间、重 CPU、依赖系统二进制的 PPT/PDF 转换任务，后续也便于把转换 worker 独立扩容或迁移到专用服务器。
+
 ### Recommended Conversion Strategy
 
 MVP 建议采用“页面级渲染 + HTML 阅读器”的方式，而不是完全还原 PPT 的 DOM。
@@ -217,7 +228,10 @@ MVP 建议采用“页面级渲染 + HTML 阅读器”的方式，而不是完�
 3. 选择洞察类型（Weekly Insight 或 Monthly Insight）和日期。
 4. 系统根据日期和洞察类型自动生成标题，例如 `2026-05-25 Weekly Insights`。
 5. 系统校验文件格式和大小。
-6. 系统创建记录，状态为 `processing`。
+6. 系统将原始文件写入对象存储，创建记录，状态为 `processing/queued`。
+7. 独立转换 worker 领取任务，状态更新为 `converting`。
+8. worker 生成高清页面预览，状态更新为 `rendering`。
+9. 预览产物上传完成后，状态更新为 `published/ready`，前端自动刷新为在线浏览。
 7. 转换服务生成 PDF/页面图/文本索引/封面。
 8. 上传者预览转换结果。
 9. 上传者点击发布，内容出现在首页和历史列表。
