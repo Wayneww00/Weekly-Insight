@@ -157,16 +157,33 @@ AI 功能不是 MVP 必需项，但建议作为 v1.1 增强能力。
 5. **Admin Console**：提供上传、发布、编辑、删除、重试转换、权限管理。
 6. **Search Index**：索引标题、摘要、标签、正文文本，后续可扩展向量检索。
 
-### Vercel Production Architecture
+### Current Google Cloud MVP Architecture
 
-生产版采用“Vercel 前台 + 对象存储 + 独立转换 worker”的架构：
+当前版本已部署为 Google Cloud Run 单体服务，优先满足内部小团队可用、上传稳定、转换清晰、固定入口可访问。
 
-- **Vercel Static/App API**：托管前端页面和轻量 API，负责上传入口、列表读取、删除、状态查询和 worker 回调。
-- **Vercel Blob**：保存原始 PPT/PDF、PPT 转换后的 PDF、每页高清 PNG 预览，以及 MVP 阶段的轻量元数据 JSON。
-- **Independent Conversion Worker**：运行在具备 LibreOffice 与 Poppler 的独立机器上，负责领取转换任务、下载原文件、转换 PDF、生成高清页面图、上传产物并回写状态。
-- **Async Status Flow**：用户上传后立即创建 `processing/queued` 记录；worker 依次回写 `converting`、`rendering`、`ready/failed`，前端轮询展示进度。
+- **Cloud Run Web App/API**：同一个 Node.js 服务承载前端静态页面、上传 API、文件列表 API、删除 API、状态查询和存储代理。
+- **Cloud Storage**：保存原始 PPT/PPTX/PDF、PPT 转换后的 PDF、每页高清 PNG 预览图，以及 MVP 阶段的轻量元数据 JSON。
+- **Direct Cloud Upload**：前端先向 API 创建 GCS resumable upload session，再把文件直接上传到 Cloud Storage，避免大文件经过 Cloud Run 请求体导致失败。
+- **In-process Conversion Queue**：上传完成后 API 创建 `processing/queued` 记录，并在 Cloud Run 实例内排队执行 LibreOffice/Poppler 转换。
+- **Conversion Runtime**：Cloud Run 容器内置 LibreOffice、Poppler、中文字体和基础字体包，用于 PPT/PPTX 转 PDF、PDF 转高清页面 PNG。
+- **Async Status Flow**：前端轮询 issue 状态，展示 `uploading`、`queued`、`converting`、`rendering`、`ready/failed` 等阶段和页数进度。
 
-该路线避免在 Vercel Serverless Function 内执行长时间、重 CPU、依赖系统二进制的 PPT/PDF 转换任务，后续也便于把转换 worker 独立扩容或迁移到专用服务器。
+当前部署约束：
+
+- Cloud Run 使用 `--concurrency=1` 和 `--max-instances=1`，避免多个实例同时写入 MVP JSON 元数据。
+- `--no-cpu-throttling` 保证上传请求返回后，后台转换仍有 CPU 可继续运行。
+- `CONVERSION_TIMEOUT_MS=900000`，单个转换任务最多允许 15 分钟。
+- 该架构适合内部 MVP 和低并发使用；如果后续上传频率增加，需要升级为独立任务队列和持久数据库。
+
+### Next Production Architecture
+
+下一阶段建议从“Cloud Run 单体 MVP”升级为“Web/API + Durable Job Queue + Dedicated Conversion Worker”的生产架构：
+
+- **Metadata Database**：用 Firestore 或 Cloud SQL 保存 issue、asset、状态、上传者、删除状态和审计日志，替代 GCS JSON。
+- **Durable Job Queue**：用 Cloud Tasks 或 Pub/Sub 保存转换任务，避免 Cloud Run 实例重启导致任务丢失。
+- **Conversion Worker**：继续运行在 Cloud Run Job、Cloud Run Worker Service 或专用 VM 上，保留 LibreOffice/Poppler 环境，独立处理转换和重试。
+- **Object Storage**：继续使用 Cloud Storage 保存原文件、转换 PDF、高清页面图、缩略图和未来文本索引文件。
+- **Observability**：记录上传耗时、转换耗时、失败原因、页数、文件大小和重试次数，便于定位问题。
 
 ### Recommended Conversion Strategy
 
@@ -223,18 +240,17 @@ MVP 建议采用“页面级渲染 + HTML 阅读器”的方式，而不是完�
 
 **上传发布流程**
 
-1. 上传者进入管理后台。
+1. 上传者打开固定入口。
 2. 点击上传，选择 PPT/PPTX/PDF。
 3. 选择洞察类型（Weekly Insight 或 Monthly Insight）和日期。
-4. 系统根据日期和洞察类型自动生成标题，例如 `2026-05-25 Weekly Insights`。
+4. 系统根据原文件名生成展示标题，并保留日期与洞察类型作为元信息。
 5. 系统校验文件格式和大小。
-6. 系统将原始文件写入对象存储，创建记录，状态为 `processing/queued`。
-7. 独立转换 worker 领取任务，状态更新为 `converting`。
-8. worker 生成高清页面预览，状态更新为 `rendering`。
-9. 预览产物上传完成后，状态更新为 `published/ready`，前端自动刷新为在线浏览。
-7. 转换服务生成 PDF/页面图/文本索引/封面。
-8. 上传者预览转换结果。
-9. 上传者点击发布，内容出现在首页和历史列表。
+6. 前端创建 Cloud Storage 直传会话，并展示上传进度。
+7. 文件上传到 Cloud Storage 后，API 创建 issue 记录，状态为 `processing/queued`。
+8. Cloud Run 内部转换队列处理任务：PPT/PPTX 先转 PDF，PDF 再渲染为高清页面图。
+9. 转换过程中前端展示 `等待处理`、`转换 PPT`、`生成页面预览`、`发布完成` 等状态和页数进度。
+10. 预览产物上传完成后，状态更新为 `published/ready`，前端自动刷新为在线浏览。
+11. 如果转换失败，保留原文件下载和失败原因，后续提供重试入口。
 
 **老板查看流程**
 
@@ -246,20 +262,21 @@ MVP 建议采用“页面级渲染 + HTML 阅读器”的方式，而不是完�
 
 ### Integration Points
 
-- 文件存储：对象存储或本地文件系统，生产建议对象存储。
-- 数据库：关系型数据库存储期数、用户、权限、资产元数据。
-- 搜索：MVP 可用数据库全文索引，后续升级为 OpenSearch/Meilisearch/向量数据库。
-- 认证：内部 SSO、企业微信/飞书登录、或账号密码登录。
+- 文件存储：当前使用 Google Cloud Storage 保存原文件、PDF 预览和页面图片。
+- 数据库：当前 MVP 使用 GCS JSON 保存元数据；下一阶段建议迁移到 Firestore 或 Cloud SQL。
+- 转换队列：当前 MVP 使用 Cloud Run 进程内队列；下一阶段建议迁移到 Cloud Tasks 或 Pub/Sub。
+- 搜索：当前支持标题和基础元数据搜索；下一阶段提取 PDF/PPT 文本后支持正文搜索，再升级到 OpenSearch/Meilisearch/向量数据库。
+- 认证：当前内部小范围使用可暂不强制；后续如扩大使用范围，再接入内部 SSO、企业微信/飞书登录或账号密码登录。
 - 通知：发布成功后可自动发送群消息或邮件，消息中只包含固定链接和本期标题。
 
 ### Security & Privacy
 
-- 所有页面默认需要登录访问。
-- 原文件和转换产物不得使用永久公开 URL。
-- 文件下载链接应支持过期签名。
+- 当前内部 MVP 允许少量团队成员直接访问固定链接。
+- 后续生产版建议所有页面默认需要登录访问。
+- 原文件和转换产物不应长期使用公开 URL；生产版文件下载链接建议支持过期签名。
 - 上传文件需限制格式和大小，建议 MVP 单文件 <= 200MB。
-- 后台操作需按角色授权。
-- 审计日志至少保存 1 年。
+- 如果使用范围扩大，后台操作需按角色授权。
+- 生产版审计日志至少保存 1 年。
 - 删除内容应默认软删除，避免误删历史材料。
 
 ### Performance Requirements
@@ -283,23 +300,25 @@ MVP 建议采用“页面级渲染 + HTML 阅读器”的方式，而不是完�
 
 ### Must Have
 
-- 登录访问。
 - 上传 PPT/PPTX/PDF。
 - 选择洞察类型和日期。
-- 系统自动生成标题，例如 `2026-05-25 Weekly Insights` 或 `2026-05 Monthly Insights`。
+- 系统根据原文件名展示标题，并保留日期与洞察类型。
 - 自动生成在线阅读版本。
 - 首页展示最新一期。
 - 历史归档列表。
-- 按标题、摘要、正文文本搜索。
+- 按标题和基础文件元数据搜索。
 - 原文件下载。
-- 后台重试转换。
+- 转换进度展示。
+- 删除误上传或不重要文件。
 
 ### Should Have
 
 - 缩略图页导航。
 - 设置某一期为最新一期。
+- 后台重试转换。
+- 按正文文本搜索。
 - 发布成功后自动通知群聊。
-- 按行业分类和年份筛选。
+- 按年份或月份筛选。
 - 软删除和审计日志。
 
 ### Could Have
@@ -402,16 +421,26 @@ Mitigation:
 
 Mitigation:
 
-- MVP 做基础全文搜索和类型筛选。
+- MVP 做标题、文件名、类型和时间维度筛选。
+- 下一阶段提取 PDF/PPT 正文文本，支持页面级搜索和跳转。
 - v1.1 引入 AI 标签和语义搜索。
 - 长期构建专题和趋势页。
 
-### Risk 5: 内部资料泄露
+### Risk 5: 转换任务在单体服务内运行，长期稳定性有限
 
 Mitigation:
 
-- 默认登录访问。
-- 下载链接短期有效。
+- MVP 限制 Cloud Run 并发和实例数，降低元数据写入冲突。
+- 上传后立即保留原文件，转换失败时仍可下载兜底。
+- 下一阶段迁移到 Cloud Tasks/Pub/Sub 和独立 worker，保证任务可恢复、可重试、可观测。
+
+### Risk 6: 内部资料泄露
+
+Mitigation:
+
+- 当前仅用于少量内部成员，控制链接分发范围。
+- 使用范围扩大后默认登录访问。
+- 生产版下载链接短期有效。
 - 按角色控制上传、删除和查看权限。
 - 保留审计日志。
 
