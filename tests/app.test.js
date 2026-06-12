@@ -141,6 +141,7 @@ globalThis.__appTest = {
   renderViewerSummary,
   renderViewerMeta,
   renderPreview,
+  getConversionProgress,
   bindSlideReader,
   handleUpload: typeof handleUpload === "function" ? handleUpload : undefined,
   setSelectedFile,
@@ -383,6 +384,33 @@ test("processing issues render an explicit background status", () => {
   assert.equal(html.includes("processing-card"), true);
   assert.equal(html.includes("正在转换 PPT"), true);
   assert.equal(html.includes("正在转换 PPT 为 PDF。"), true);
+});
+
+test("processing preview exposes conversion progress", () => {
+  const app = loadApp();
+  const html = app.renderPreview(
+    {
+      title: "2026-06-12 Weekly Insights",
+      fileName: "weekly.pdf",
+      fileType: "application/pdf",
+      fileSize: 4096,
+      status: "processing",
+      conversionStatus: "rendering",
+      conversionMessage: "正在生成高清在线预览：7 / 25 页。",
+      conversionProgress: {
+        phase: "rendering",
+        percent: 28,
+        processedPages: 7,
+        totalPages: 25,
+      },
+      pageUrls: [],
+    },
+    null
+  );
+
+  assert.equal(html.includes("conversion-progress"), true);
+  assert.equal(html.includes("28%"), true);
+  assert.equal(html.includes("已完成 7 / 25 页"), true);
 });
 
 test("renders converted ppt preview when a pdf preview url exists", () => {

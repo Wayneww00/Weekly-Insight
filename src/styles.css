@@ -1177,6 +1177,57 @@ body {
   animation: pulseProcessing 1.6s ease-in-out infinite;
 }
 
+.conversion-progress {
+  width: min(360px, 100%);
+  margin: 0 auto var(--space-lg);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(94, 207, 181, 0.18);
+  background: rgba(94, 207, 181, 0.06);
+}
+
+.conversion-progress-head,
+.conversion-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.conversion-progress-head {
+  margin-bottom: 8px;
+  color: var(--ink-200);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.conversion-progress-head strong {
+  color: var(--accent-text);
+  font-size: 13px;
+}
+
+.conversion-progress-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.conversion-progress-bar span {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-text));
+  transition: width 0.35s ease;
+}
+
+.conversion-progress-meta {
+  margin-top: 8px;
+  color: var(--ink-500);
+  font-size: 11px;
+}
+
 .fallback-card h3 {
   margin: 0 0 var(--space-sm);
   font-size: 22px;

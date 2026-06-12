@@ -282,6 +282,14 @@ function buildUploadIssue(uploadMetadata) {
       pageUrls: [],
       conversionStatus: "queued",
       conversionMessage: "已上传，等待生成在线预览。",
+      conversionProgress: {
+        phase: "queued",
+        percent: 0,
+        processedPages: 0,
+        totalPages: 0,
+        startedAt: "",
+        updatedAt: now,
+      },
       status: "processing",
       uploaderId: "local-user",
       publishedAt: "",
@@ -352,6 +360,14 @@ async function handleRetryIssueRequest(url, response) {
     status: "processing",
     conversionStatus: "queued",
     conversionMessage: "已重新排队生成在线预览。",
+    conversionProgress: {
+      phase: "queued",
+      percent: 0,
+      processedPages: 0,
+      totalPages: 0,
+      startedAt: "",
+      updatedAt: new Date().toISOString(),
+    },
     pageUrls: [],
     updatedAt: new Date().toISOString(),
   });
@@ -405,11 +421,20 @@ async function processConversion(issueId) {
   }
 
   if (ext === ".ppt" || ext === ".pptx") {
+    const now = new Date().toISOString();
     await updateIssue(issueId, {
       status: "processing",
       conversionStatus: "converting",
       conversionMessage: "正在转换 PPT 为 PDF。",
-      updatedAt: new Date().toISOString(),
+      conversionProgress: {
+        phase: "converting",
+        percent: 8,
+        processedPages: 0,
+        totalPages: 0,
+        startedAt: now,
+        updatedAt: now,
+      },
+      updatedAt: now,
     });
     const conversion = await convertPresentationToPdf(originalPath, uploadDir);
     if (conversion.status !== "ready") {
@@ -443,14 +468,46 @@ async function processConversion(issueId) {
     });
   }
 
+  const totalPages = await getPdfPageCount(pdfPath).catch(() => 0);
+  const renderingStartedAt = new Date().toISOString();
   await updateIssue(issueId, {
     status: "processing",
     previewUrl,
     conversionStatus: "rendering",
-    conversionMessage: "正在生成高清在线预览。",
-    updatedAt: new Date().toISOString(),
+    conversionMessage: totalPages ? `正在生成高清在线预览：0 / ${totalPages} 页。` : "正在生成高清在线预览。",
+    conversionProgress: {
+      phase: "rendering",
+      percent: ext === ".pdf" ? 5 : 35,
+      processedPages: 0,
+      totalPages,
+      startedAt: renderingStartedAt,
+      updatedAt: renderingStartedAt,
+    },
+    updatedAt: renderingStartedAt,
   });
-  const pageUrls = await renderPdfPages(pdfPath, uploadDir, issueId);
+  const pageUrls = await renderPdfPages(pdfPath, uploadDir, issueId, {
+    totalPages,
+    basePercent: ext === ".pdf" ? 5 : 35,
+    onProgress: async ({ processedPages, totalPages, percent }) => {
+      const now = new Date().toISOString();
+      await updateIssue(issueId, {
+        status: "processing",
+        conversionStatus: "rendering",
+        conversionMessage: totalPages
+          ? `正在生成高清在线预览：${processedPages} / ${totalPages} 页。`
+          : "正在生成高清在线预览。",
+        conversionProgress: {
+          phase: "rendering",
+          percent,
+          processedPages,
+          totalPages,
+          startedAt: renderingStartedAt,
+          updatedAt: now,
+        },
+        updatedAt: now,
+      });
+    },
+  });
   const now = new Date().toISOString();
   await updateDb((nextDb) => {
     const nextIssue = nextDb.issues.find((item) => item.id === issueId);
@@ -460,6 +517,14 @@ async function processConversion(issueId) {
     nextIssue.status = "published";
     nextIssue.conversionStatus = "ready";
     nextIssue.conversionMessage = "发布完成，可在线预览。";
+    nextIssue.conversionProgress = {
+      phase: "ready",
+      percent: 100,
+      processedPages: pageUrls.length,
+      totalPages: pageUrls.length,
+      startedAt: nextIssue.conversionProgress?.startedAt || "",
+      updatedAt: now,
+    };
     nextIssue.publishedAt = nextIssue.publishedAt || now;
     nextIssue.updatedAt = now;
     pageUrls.forEach((pageUrl, index) => {
@@ -481,10 +546,56 @@ async function processConversion(issueId) {
   }
 }
 
-async function renderPdfPages(pdfPath, uploadDir, issueId) {
+async function renderPdfPages(pdfPath, uploadDir, issueId, options = {}) {
   const pagesDir = path.join(uploadDir, "pages");
   await fs.promises.rm(pagesDir, { recursive: true, force: true });
   await fs.promises.mkdir(pagesDir, { recursive: true });
+  const totalPages = options.totalPages || await getPdfPageCount(pdfPath).catch(() => 0);
+
+  if (totalPages > 0) {
+    const urls = [];
+    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+      const outputPrefix = path.join(pagesDir, `page-${String(pageNumber).padStart(2, "0")}`);
+      try {
+        await execFileAsync("pdftoppm", [
+          "-png",
+          "-singlefile",
+          "-f",
+          String(pageNumber),
+          "-l",
+          String(pageNumber),
+          "-r",
+          String(previewDpi),
+          pdfPath,
+          outputPrefix,
+        ], {
+          timeout: conversionTimeoutMs,
+        });
+      } catch (error) {
+        throw enrichCommandError(`PDF 第 ${pageNumber} 页渲染失败`, error);
+      }
+
+      const pageFileName = `page-${String(pageNumber).padStart(2, "0")}.png`;
+      const pagePath = path.join(pagesDir, pageFileName);
+      let pageUrl = `/data/uploads/${issueId}/pages/${encodeURIComponent(pageFileName)}`;
+      if (isCloudStorageEnabled) {
+        const objectName = `uploads/${issueId}/pages/${pageFileName}`;
+        await uploadFileToStorage(pagePath, objectName, "image/png");
+        pageUrl = storageUrl(objectName);
+      }
+      urls.push(pageUrl);
+
+      const pageRatio = pageNumber / totalPages;
+      const basePercent = Number(options.basePercent || 0);
+      const percent = Math.min(99, Math.round(basePercent + pageRatio * (99 - basePercent)));
+      await options.onProgress?.({
+        processedPages: pageNumber,
+        totalPages,
+        percent,
+      });
+    }
+    return urls;
+  }
 
   try {
     await execFileAsync("pdftoppm", ["-png", "-r", String(previewDpi), pdfPath, path.join(pagesDir, "page")], {
@@ -509,6 +620,12 @@ async function renderPdfPages(pdfPath, uploadDir, issueId) {
   }
 
   return pageFiles.map((fileName) => `/data/uploads/${issueId}/pages/${encodeURIComponent(fileName)}`);
+}
+
+async function getPdfPageCount(pdfPath) {
+  const { stdout } = await execFileAsync("pdfinfo", [pdfPath], { timeout: 30000 });
+  const match = String(stdout).match(/^Pages:\s+(\d+)/m);
+  return match ? Number(match[1]) : 0;
 }
 
 function writeRequestBody(request, filePath) {

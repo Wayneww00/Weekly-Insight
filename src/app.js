@@ -494,6 +494,43 @@ function renderViewerSummary(issue) {
   return getIssueDisplayMeta(issue);
 }
 
+function getConversionProgress(issue) {
+  const progress = issue.conversionProgress || {};
+  const percent = Number.isFinite(Number(progress.percent))
+    ? Math.max(0, Math.min(100, Math.round(Number(progress.percent))))
+    : getFallbackConversionPercent(issue);
+  const totalPages = Number(progress.totalPages || 0);
+  const processedPages = Number(progress.processedPages || 0);
+  const labelMap = {
+    queued: "等待处理",
+    converting: "转换 PPT",
+    rendering: "生成页面预览",
+    ready: "发布完成",
+  };
+  const label = labelMap[progress.phase] || labelMap[issue.conversionStatus] || "生成预览";
+  const detail = totalPages
+    ? `已完成 ${Math.min(processedPages, totalPages)} / ${totalPages} 页`
+    : getIssueProcessingTitle(issue);
+  const hint = percent >= 100
+    ? "即将刷新预览"
+    : "完成后会自动切换为在线预览";
+
+  return {
+    percent,
+    label,
+    detail,
+    hint,
+  };
+}
+
+function getFallbackConversionPercent(issue) {
+  if (issue.conversionStatus === "queued") return 5;
+  if (issue.conversionStatus === "converting") return 20;
+  if (issue.conversionStatus === "rendering") return 55;
+  if (issue.conversionStatus === "ready") return 100;
+  return issue.status === "processing" ? 10 : 0;
+}
+
 function getFileExtension(issue) {
   return issue.fileName?.split(".").pop()?.toUpperCase() || "FILE";
 }
@@ -533,6 +570,7 @@ function renderPreview(issue, file, fileUrl = "") {
   const pageUrls = Array.isArray(issue.pageUrls) ? issue.pageUrls : [];
 
   if (issue.status === "processing" || ["queued", "converting", "rendering"].includes(issue.conversionStatus)) {
+    const progress = getConversionProgress(issue);
     return `
       <div class="preview-shell">
         <div class="preview-stage">
@@ -546,6 +584,19 @@ function renderPreview(issue, file, fileUrl = "") {
             </div>
             <h3>${escapeHtml(getIssueProcessingTitle(issue))}</h3>
             <p>${escapeHtml(issue.conversionMessage || "系统正在后台生成在线预览，完成后会自动更新。")}</p>
+            <div class="conversion-progress" aria-label="预览生成进度">
+              <div class="conversion-progress-head">
+                <span>${escapeHtml(progress.label)}</span>
+                <strong>${progress.percent}%</strong>
+              </div>
+              <div class="conversion-progress-bar" aria-hidden="true">
+                <span style="width: ${progress.percent}%"></span>
+              </div>
+              <div class="conversion-progress-meta">
+                <span>${escapeHtml(progress.detail)}</span>
+                <span>${escapeHtml(progress.hint)}</span>
+              </div>
+            </div>
             <div class="file-meta">
               <span>${escapeHtml(issue.fileName)}</span>
               <span>${fileSizeText}</span>
