@@ -146,7 +146,8 @@ globalThis.__appTest = {
   handleUpload: typeof handleUpload === "function" ? handleUpload : undefined,
   setSelectedFile,
   formatUploadProgress,
-  isAcceptedFile
+  isAcceptedFile,
+  retryIssue: typeof retryIssue === "function" ? retryIssue : undefined
 };`,
     context
   );
@@ -413,6 +414,28 @@ test("processing preview exposes conversion progress", () => {
   assert.equal(html.includes("已完成 7 / 25 页"), true);
 });
 
+test("failed previews expose a retry action instead of only a download fallback", () => {
+  const app = loadApp();
+  const html = app.renderPreview(
+    {
+      id: "failed-issue",
+      title: "2026-06-12 Weekly Insights",
+      fileName: "weekly.pdf",
+      fileType: "application/pdf",
+      fileSize: 4096,
+      status: "failed",
+      conversionStatus: "failed",
+      conversionMessage: "PDF 页面渲染失败",
+      pageUrls: [],
+    },
+    null
+  );
+
+  assert.equal(html.includes("data-retry-preview=\"failed-issue\""), true);
+  assert.equal(html.includes("重新生成预览"), true);
+  assert.equal(typeof app.retryIssue, "function");
+});
+
 test("renders converted ppt preview when a pdf preview url exists", () => {
   const app = loadApp();
   const issue = {
@@ -468,6 +491,24 @@ test("renders custom continuous reader instead of browser pdf viewer when page i
   assert.equal(html.includes("pdf-embed"), false);
   assert.equal(html.includes("slide-controls"), false);
   assert.equal(html.includes("data-slide-count"), false);
+});
+
+test("slide thumbnails use lightweight thumbnail urls while pages keep high resolution urls", () => {
+  const app = loadApp();
+  const html = app.renderPreview(
+    {
+      title: "2026-06-09 Weekly Insights",
+      fileName: "weekly.pdf",
+      fileType: "application/pdf",
+      fileSize: 2048,
+      pageUrls: ["/storage/uploads/issue-1/pages/page-01.png", "/storage/uploads/issue-1/pages/page-02.png"],
+      thumbUrls: ["/storage/uploads/issue-1/thumbs/page-01.png", "/storage/uploads/issue-1/thumbs/page-02.png"],
+    },
+    null
+  );
+
+  assert.equal(html.includes("src=\"/storage/uploads/issue-1/thumbs/page-01.png\""), true);
+  assert.equal(html.includes("src=\"/storage/uploads/issue-1/pages/page-01.png\""), true);
 });
 
 test("slide reader binding keeps keyboard navigation without hijacking native scroll", () => {

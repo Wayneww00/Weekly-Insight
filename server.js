@@ -12,6 +12,7 @@ const dataRoot = path.join(root, "data");
 const uploadsRoot = path.join(dataRoot, "uploads");
 const dbPath = path.join(dataRoot, "db.json");
 const previewDpi = Number(process.env.PREVIEW_DPI || 300);
+const thumbnailDpi = Number(process.env.THUMBNAIL_DPI || 42);
 const conversionTimeoutMs = Number(process.env.CONVERSION_TIMEOUT_MS || 900000);
 const gcsBucketName = process.env.GCS_BUCKET || "";
 const isCloudStorageEnabled = Boolean(gcsBucketName);
@@ -280,6 +281,8 @@ function buildUploadIssue(uploadMetadata) {
       originalUrl,
       previewUrl: "",
       pageUrls: [],
+      thumbUrls: [],
+      conversionJobId: `${uploadMetadata.issueId}-conversion`,
       conversionStatus: "queued",
       conversionMessage: "已上传，等待生成在线预览。",
       conversionProgress: {
@@ -313,6 +316,7 @@ async function registerUploadedIssue(issue) {
     size: issue.fileSize,
     createdAt: issue.createdAt,
   });
+  await enqueueConversionJob(issue.id);
   enqueueConversion(issue.id);
 }
 
@@ -369,10 +373,14 @@ async function handleRetryIssueRequest(url, response) {
       updatedAt: new Date().toISOString(),
     },
     pageUrls: [],
+    thumbUrls: [],
     updatedAt: new Date().toISOString(),
   });
+  await enqueueConversionJob(issueId);
   enqueueConversion(issueId);
-  writeJson(response, 202, { ok: true });
+  const updatedDb = await readDb();
+  const updatedIssue = updatedDb.issues.find((item) => item.id === issueId && !item.deletedAt);
+  writeJson(response, 202, { ok: true, issue: updatedIssue });
 }
 
 function enqueueConversion(issueId) {
@@ -389,6 +397,7 @@ async function runConversionQueue() {
     try {
       await processConversion(issueId);
     } catch (error) {
+      await failConversionJob(issueId, error.message).catch(() => {});
       await updateIssue(issueId, {
         status: "failed",
         conversionStatus: "failed",
@@ -405,6 +414,12 @@ async function processConversion(issueId) {
   const db = await readDb();
   const issue = db.issues.find((item) => item.id === issueId && !item.deletedAt);
   if (!issue) return;
+  if (issue.status === "published" && issue.conversionStatus === "ready" && Array.isArray(issue.pageUrls) && issue.pageUrls.length) {
+    await completeConversionJob(issueId).catch(() => {});
+    return;
+  }
+
+  await startConversionJob(issueId);
 
   const workspace = isCloudStorageEnabled
     ? await fs.promises.mkdtemp(path.join(os.tmpdir(), `insight-convert-${issueId}-`))
@@ -438,12 +453,16 @@ async function processConversion(issueId) {
     });
     const conversion = await convertPresentationToPdf(originalPath, uploadDir);
     if (conversion.status !== "ready") {
+      await failConversionJob(issueId, conversion.message);
       await updateIssue(issueId, {
         status: "failed",
         conversionStatus: conversion.status,
         conversionMessage: conversion.message,
         updatedAt: new Date().toISOString(),
       });
+      if (isCloudStorageEnabled) {
+        await fs.promises.rm(workspace, { recursive: true, force: true });
+      }
       return;
     }
     const convertedName = decodeURIComponent(path.basename(conversion.previewUrl));
@@ -485,7 +504,7 @@ async function processConversion(issueId) {
     },
     updatedAt: renderingStartedAt,
   });
-  const pageUrls = await renderPdfPages(pdfPath, uploadDir, issueId, {
+  const previewAssets = await renderPdfPages(pdfPath, uploadDir, issueId, {
     totalPages,
     basePercent: ext === ".pdf" ? 5 : 35,
     onProgress: async ({ processedPages, totalPages, percent }) => {
@@ -508,12 +527,14 @@ async function processConversion(issueId) {
       });
     },
   });
+  const { pageUrls, thumbUrls } = previewAssets;
   const now = new Date().toISOString();
   await updateDb((nextDb) => {
     const nextIssue = nextDb.issues.find((item) => item.id === issueId);
     if (!nextIssue || nextIssue.deletedAt) return;
     nextIssue.previewUrl = previewUrl;
     nextIssue.pageUrls = pageUrls;
+    nextIssue.thumbUrls = thumbUrls;
     nextIssue.status = "published";
     nextIssue.conversionStatus = "ready";
     nextIssue.conversionMessage = "发布完成，可在线预览。";
@@ -538,8 +559,19 @@ async function processConversion(issueId) {
         size: 0,
         createdAt: now,
       });
+      upsertAssetInDb(nextDb, {
+        id: `${issueId}-thumb-${index + 1}`,
+        issueId,
+        type: "thumbnail",
+        url: thumbUrls[index] || pageUrl,
+        pageNumber: index + 1,
+        mimeType: "image/png",
+        size: 0,
+        createdAt: now,
+      });
     });
   });
+  await completeConversionJob(issueId);
 
   if (isCloudStorageEnabled) {
     await fs.promises.rm(workspace, { recursive: true, force: true });
@@ -548,14 +580,19 @@ async function processConversion(issueId) {
 
 async function renderPdfPages(pdfPath, uploadDir, issueId, options = {}) {
   const pagesDir = path.join(uploadDir, "pages");
+  const thumbsDir = path.join(uploadDir, "thumbs");
   await fs.promises.rm(pagesDir, { recursive: true, force: true });
+  await fs.promises.rm(thumbsDir, { recursive: true, force: true });
   await fs.promises.mkdir(pagesDir, { recursive: true });
+  await fs.promises.mkdir(thumbsDir, { recursive: true });
   const totalPages = options.totalPages || await getPdfPageCount(pdfPath).catch(() => 0);
 
   if (totalPages > 0) {
-    const urls = [];
+    const pageUrls = [];
+    const thumbUrls = [];
     for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
       const outputPrefix = path.join(pagesDir, `page-${String(pageNumber).padStart(2, "0")}`);
+      const thumbPrefix = path.join(thumbsDir, `page-${String(pageNumber).padStart(2, "0")}`);
       try {
         await execFileAsync("pdftoppm", [
           "-png",
@@ -571,19 +608,39 @@ async function renderPdfPages(pdfPath, uploadDir, issueId, options = {}) {
         ], {
           timeout: conversionTimeoutMs,
         });
+        await execFileAsync("pdftoppm", [
+          "-png",
+          "-singlefile",
+          "-f",
+          String(pageNumber),
+          "-l",
+          String(pageNumber),
+          "-r",
+          String(thumbnailDpi),
+          pdfPath,
+          thumbPrefix,
+        ], {
+          timeout: conversionTimeoutMs,
+        });
       } catch (error) {
         throw enrichCommandError(`PDF 第 ${pageNumber} 页渲染失败`, error);
       }
 
       const pageFileName = `page-${String(pageNumber).padStart(2, "0")}.png`;
       const pagePath = path.join(pagesDir, pageFileName);
+      const thumbPath = path.join(thumbsDir, pageFileName);
       let pageUrl = `/data/uploads/${issueId}/pages/${encodeURIComponent(pageFileName)}`;
+      let thumbUrl = `/data/uploads/${issueId}/thumbs/${encodeURIComponent(pageFileName)}`;
       if (isCloudStorageEnabled) {
         const objectName = `uploads/${issueId}/pages/${pageFileName}`;
+        const thumbObjectName = `uploads/${issueId}/thumbs/${pageFileName}`;
         await uploadFileToStorage(pagePath, objectName, "image/png");
+        await uploadFileToStorage(thumbPath, thumbObjectName, "image/png");
         pageUrl = storageUrl(objectName);
+        thumbUrl = storageUrl(thumbObjectName);
       }
-      urls.push(pageUrl);
+      pageUrls.push(pageUrl);
+      thumbUrls.push(thumbUrl);
 
       const pageRatio = pageNumber / totalPages;
       const basePercent = Number(options.basePercent || 0);
@@ -594,7 +651,7 @@ async function renderPdfPages(pdfPath, uploadDir, issueId, options = {}) {
         percent,
       });
     }
-    return urls;
+    return { pageUrls, thumbUrls };
   }
 
   try {
@@ -610,16 +667,17 @@ async function renderPdfPages(pdfPath, uploadDir, issueId, options = {}) {
     .sort((a, b) => Number(a.match(/\d+/)?.[0] || 0) - Number(b.match(/\d+/)?.[0] || 0));
 
   if (isCloudStorageEnabled) {
-    const urls = [];
+    const pageUrls = [];
     for (const fileName of pageFiles) {
       const objectName = `uploads/${issueId}/pages/${fileName}`;
       await uploadFileToStorage(path.join(pagesDir, fileName), objectName, "image/png");
-      urls.push(storageUrl(objectName));
+      pageUrls.push(storageUrl(objectName));
     }
-    return urls;
+    return { pageUrls, thumbUrls: [...pageUrls] };
   }
 
-  return pageFiles.map((fileName) => `/data/uploads/${issueId}/pages/${encodeURIComponent(fileName)}`);
+  const pageUrls = pageFiles.map((fileName) => `/data/uploads/${issueId}/pages/${encodeURIComponent(fileName)}`);
+  return { pageUrls, thumbUrls: [...pageUrls] };
 }
 
 async function getPdfPageCount(pdfPath) {
@@ -732,7 +790,7 @@ async function ensureDb() {
   try {
     await fs.promises.access(dbPath, fs.constants.R_OK);
   } catch {
-    await fs.promises.writeFile(dbPath, JSON.stringify({ issues: [], assets: [] }, null, 2));
+    await fs.promises.writeFile(dbPath, JSON.stringify({ issues: [], assets: [], jobs: [] }, null, 2));
   }
 }
 
@@ -740,16 +798,17 @@ async function readDb() {
   if (isCloudStorageEnabled) {
     const file = bucket().file("db/insight-db.json");
     const [exists] = await file.exists();
-    if (!exists) return { issues: [], assets: [] };
+    if (!exists) return { issues: [], assets: [], jobs: [] };
     const [raw] = await file.download();
     try {
       const parsed = JSON.parse(raw.toString("utf8"));
       return {
         issues: Array.isArray(parsed.issues) ? parsed.issues : [],
         assets: Array.isArray(parsed.assets) ? parsed.assets : [],
+        jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
       };
     } catch {
-      return { issues: [], assets: [] };
+      return { issues: [], assets: [], jobs: [] };
     }
   }
 
@@ -760,9 +819,10 @@ async function readDb() {
     return {
       issues: Array.isArray(parsed.issues) ? parsed.issues : [],
       assets: Array.isArray(parsed.assets) ? parsed.assets : [],
+      jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
     };
   } catch {
-    return { issues: [], assets: [] };
+    return { issues: [], assets: [], jobs: [] };
   }
 }
 
@@ -771,6 +831,7 @@ async function writeDb(db) {
     await bucket().file("db/insight-db.json").save(JSON.stringify({
       issues: sortIssues(db.issues || []),
       assets: db.assets || [],
+      jobs: db.jobs || [],
     }, null, 2), {
       contentType: "application/json; charset=utf-8",
       resumable: false,
@@ -782,6 +843,7 @@ async function writeDb(db) {
   await fs.promises.writeFile(dbPath, JSON.stringify({
     issues: sortIssues(db.issues || []),
     assets: db.assets || [],
+    jobs: db.jobs || [],
   }, null, 2));
 }
 
@@ -824,6 +886,101 @@ async function updateIssue(issueId, patch) {
   });
 }
 
+async function enqueueConversionJob(issueId) {
+  const now = new Date().toISOString();
+  await updateDb((db) => {
+    db.jobs = Array.isArray(db.jobs) ? db.jobs : [];
+    const jobId = `${issueId}-conversion`;
+    const existing = db.jobs.find((job) => job.id === jobId);
+    const jobPatch = {
+      id: jobId,
+      issueId,
+      type: "conversion",
+      status: "queued",
+      lastError: "",
+      updatedAt: now,
+      completedAt: "",
+    };
+
+    if (existing) {
+      Object.assign(existing, jobPatch);
+      return;
+    }
+
+    db.jobs.push({
+      ...jobPatch,
+      attempts: 0,
+      maxAttempts: 3,
+      createdAt: now,
+      startedAt: "",
+    });
+  });
+}
+
+async function startConversionJob(issueId) {
+  const now = new Date().toISOString();
+  await updateDb((db) => {
+    db.jobs = Array.isArray(db.jobs) ? db.jobs : [];
+    const jobId = `${issueId}-conversion`;
+    let job = db.jobs.find((item) => item.id === jobId);
+    if (!job) {
+      job = {
+        id: jobId,
+        issueId,
+        type: "conversion",
+        attempts: 0,
+        maxAttempts: 3,
+        createdAt: now,
+      };
+      db.jobs.push(job);
+    }
+    job.status = "running";
+    job.attempts = Number(job.attempts || 0) + 1;
+    job.startedAt = now;
+    job.updatedAt = now;
+    job.completedAt = "";
+    job.lastError = "";
+  });
+}
+
+async function completeConversionJob(issueId) {
+  const now = new Date().toISOString();
+  await updateDb((db) => {
+    const job = (db.jobs || []).find((item) => item.id === `${issueId}-conversion`);
+    if (!job) return;
+    job.status = "succeeded";
+    job.updatedAt = now;
+    job.completedAt = now;
+    job.lastError = "";
+  });
+}
+
+async function failConversionJob(issueId, message) {
+  const now = new Date().toISOString();
+  await updateDb((db) => {
+    const job = (db.jobs || []).find((item) => item.id === `${issueId}-conversion`);
+    if (!job) return;
+    job.status = "failed";
+    job.updatedAt = now;
+    job.completedAt = now;
+    job.lastError = message || "Conversion failed.";
+  });
+}
+
+async function recoverPendingConversionJobs() {
+  const db = await readDb();
+  const activeJobs = (db.jobs || []).filter((job) => ["queued", "running"].includes(job.status));
+  const activeIssueIds = new Set(
+    (db.issues || [])
+      .filter((issue) => !issue.deletedAt && (issue.status === "processing" || ["queued", "converting", "rendering"].includes(issue.conversionStatus)))
+      .map((issue) => issue.id)
+  );
+
+  activeJobs.forEach((job) => {
+    if (activeIssueIds.has(job.issueId)) enqueueConversion(job.issueId);
+  });
+}
+
 async function upsertAsset(asset) {
   await updateDb((db) => upsertAssetInDb(db, asset));
 }
@@ -858,6 +1015,8 @@ function normalizeImportedIssue(rawIssue) {
     originalUrl: rawIssue.originalUrl || "",
     previewUrl: rawIssue.previewUrl || "",
     pageUrls: Array.isArray(rawIssue.pageUrls) ? rawIssue.pageUrls : [],
+    thumbUrls: Array.isArray(rawIssue.thumbUrls) ? rawIssue.thumbUrls : [],
+    conversionJobId: rawIssue.conversionJobId || `${id}-conversion`,
     conversionStatus: rawIssue.conversionStatus || (rawIssue.pageUrls?.length ? "ready" : "queued"),
     conversionMessage: rawIssue.conversionMessage || "",
     status: rawIssue.status || (rawIssue.pageUrls?.length ? "published" : "processing"),
@@ -982,7 +1141,8 @@ function writeJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
-ensureDb().then(() => {
+ensureDb().then(async () => {
+  await recoverPendingConversionJobs();
   server.listen(port, "0.0.0.0", () => {
     console.log(`Insight Hub running at http://0.0.0.0:${port}`);
   });

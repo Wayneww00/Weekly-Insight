@@ -548,6 +548,7 @@ function getIssueDisplayMeta(issue) {
 function bindPreviewActions() {
   const fullscreenButton = document.querySelector("[data-preview-fullscreen]");
   const slideReader = document.querySelector("[data-slide-reader]");
+  const retryButton = document.querySelector("[data-retry-preview]");
   fullscreenButton?.addEventListener("click", () => {
     const previewShell = document.querySelector(".preview-shell");
     if (!previewShell) return;
@@ -559,6 +560,9 @@ function bindPreviewActions() {
 
     previewShell.requestFullscreen?.();
   });
+  retryButton?.addEventListener("click", () => {
+    retryIssue(retryButton.dataset.retryPreview);
+  });
   bindSlideReader(slideReader);
 }
 
@@ -568,6 +572,9 @@ function renderPreview(issue, file, fileUrl = "") {
   const isSample = !file;
   const fileSizeText = formatFileSize(issue.fileSize);
   const pageUrls = Array.isArray(issue.pageUrls) ? issue.pageUrls : [];
+  const thumbUrls = Array.isArray(issue.thumbUrls) && issue.thumbUrls.length === pageUrls.length
+    ? issue.thumbUrls
+    : pageUrls;
 
   if (issue.status === "processing" || ["queued", "converting", "rendering"].includes(issue.conversionStatus)) {
     const progress = getConversionProgress(issue);
@@ -621,6 +628,9 @@ function renderPreview(issue, file, fileUrl = "") {
             </div>
             <h3>预览生成失败</h3>
             <p>${escapeHtml(issue.conversionMessage || "当前文件暂时无法生成在线预览，请下载原文件查看。")}</p>
+            <button class="btn btn-primary retry-preview" type="button" data-retry-preview="${escapeHtml(issue.id || "")}">
+              重新生成预览
+            </button>
             <div class="file-meta">
               <span>${escapeHtml(issue.fileName)}</span>
               <span>${fileSizeText}</span>
@@ -645,7 +655,7 @@ function renderPreview(issue, file, fileUrl = "") {
             ${pageUrls
               .map((pageUrl, index) => `
                 <button class="slide-thumb ${index === 0 ? "active" : ""}" type="button" data-slide-thumb="${index}" aria-label="跳转到第 ${index + 1} 页">
-                  <img src="${escapeHtml(pageUrl)}" alt="" loading="${index < 4 ? "eager" : "lazy"}" />
+                  <img src="${escapeHtml(thumbUrls[index] || pageUrl)}" alt="" loading="${index < 4 ? "eager" : "lazy"}" />
                   <span>${index + 1}</span>
                 </button>
               `)
@@ -928,6 +938,36 @@ async function deleteIssue(issueId) {
   } catch (error) {
     console.error(error);
     setUploadStatus("删除失败，请重试。");
+  }
+}
+
+async function retryIssue(issueId) {
+  if (!issueId || typeof fetch !== "function") return;
+  const issue = state.issues.find((item) => item.id === issueId);
+  if (!issue) return;
+
+  try {
+    setUploadStatus("已重新提交，正在后台生成预览。");
+    const response = await fetch(`/api/issue/retry?issueId=${encodeURIComponent(issueId)}`, { method: "POST" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "重新生成预览失败，请稍后重试。");
+    }
+    const nextIssue = payload.issue || {
+      ...issue,
+      status: "processing",
+      conversionStatus: "queued",
+      conversionMessage: "已重新排队生成在线预览。",
+      pageUrls: [],
+      thumbUrls: [],
+    };
+    upsertIssue(nextIssue);
+    state.selectedIssueId = issueId;
+    render();
+    syncIssuePolling();
+  } catch (error) {
+    console.error(error);
+    setUploadStatus(error.message || "重新生成预览失败，请稍后重试。");
   }
 }
 

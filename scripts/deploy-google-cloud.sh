@@ -23,7 +23,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
-  --set-env-vars "GCS_BUCKET=${BUCKET_NAME},PREVIEW_DPI=300,CONVERSION_TIMEOUT_MS=900000" \
+  --set-env-vars "GCS_BUCKET=${BUCKET_NAME},PREVIEW_DPI=300,THUMBNAIL_DPI=42,CONVERSION_TIMEOUT_MS=900000" \
   --memory 4Gi \
   --cpu 2 \
   --timeout 900 \

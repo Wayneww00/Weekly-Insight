@@ -164,15 +164,16 @@ AI 功能不是 MVP 必需项，但建议作为 v1.1 增强能力。
 - **Cloud Run Web App/API**：同一个 Node.js 服务承载前端静态页面、上传 API、文件列表 API、删除 API、状态查询和存储代理。
 - **Cloud Storage**：保存原始 PPT/PPTX/PDF、PPT 转换后的 PDF、每页高清 PNG 预览图，以及 MVP 阶段的轻量元数据 JSON。
 - **Direct Cloud Upload**：前端先向 API 创建 GCS resumable upload session，再把文件直接上传到 Cloud Storage，避免大文件经过 Cloud Run 请求体导致失败。
-- **In-process Conversion Queue**：上传完成后 API 创建 `processing/queued` 记录，并在 Cloud Run 实例内排队执行 LibreOffice/Poppler 转换。
+- **Durable Conversion Job Record**：上传完成后 API 创建 `processing/queued` issue 和对应的 conversion job 记录；Cloud Run 进程内队列负责执行，DB 中的 job 记录用于状态追踪和启动恢复。
 - **Conversion Runtime**：Cloud Run 容器内置 LibreOffice、Poppler、中文字体和基础字体包，用于 PPT/PPTX 转 PDF、PDF 转高清页面 PNG。
-- **Async Status Flow**：前端轮询 issue 状态，展示 `uploading`、`queued`、`converting`、`rendering`、`ready/failed` 等阶段和页数进度。
+- **Async Status Flow**：前端轮询 issue 状态，展示 `uploading`、`queued`、`converting`、`rendering`、`ready/failed` 等阶段和页数进度；失败后可重新提交生成预览。
 
 当前部署约束：
 
 - Cloud Run 使用 `--concurrency=1` 和 `--max-instances=1`，避免多个实例同时写入 MVP JSON 元数据。
 - `--no-cpu-throttling` 保证上传请求返回后，后台转换仍有 CPU 可继续运行。
 - `CONVERSION_TIMEOUT_MS=900000`，单个转换任务最多允许 15 分钟。
+- 当前 job 记录可以在服务重启后恢复未完成任务，但还不是完整的 Cloud Tasks/Pub/Sub 级别任务队列。
 - 该架构适合内部 MVP 和低并发使用；如果后续上传频率增加，需要升级为独立任务队列和持久数据库。
 
 ### Next Production Architecture
@@ -192,7 +193,7 @@ MVP 建议采用“页面级渲染 + HTML 阅读器”的方式，而不是完�
 具体方案：
 
 - PPT/PPTX 先转换为 PDF。
-- PDF 每页渲染为高清图片或 Canvas 可浏览页面。
+- PDF 每页渲染为高清图片用于阅读，同时生成轻量缩略图用于左侧页导航。
 - 同步提取文本用于搜索。
 - 前端阅读器以“页”为单位展示，支持缩略图、翻页、全屏和下载原文件。
 
@@ -250,7 +251,7 @@ MVP 建议采用“页面级渲染 + HTML 阅读器”的方式，而不是完�
 8. Cloud Run 内部转换队列处理任务：PPT/PPTX 先转 PDF，PDF 再渲染为高清页面图。
 9. 转换过程中前端展示 `等待处理`、`转换 PPT`、`生成页面预览`、`发布完成` 等状态和页数进度。
 10. 预览产物上传完成后，状态更新为 `published/ready`，前端自动刷新为在线浏览。
-11. 如果转换失败，保留原文件下载和失败原因，后续提供重试入口。
+11. 如果转换失败，保留原文件下载和失败原因，并提供重新生成预览入口。
 
 **老板查看流程**
 
@@ -264,7 +265,7 @@ MVP 建议采用“页面级渲染 + HTML 阅读器”的方式，而不是完�
 
 - 文件存储：当前使用 Google Cloud Storage 保存原文件、PDF 预览和页面图片。
 - 数据库：当前 MVP 使用 GCS JSON 保存元数据；下一阶段建议迁移到 Firestore 或 Cloud SQL。
-- 转换队列：当前 MVP 使用 Cloud Run 进程内队列；下一阶段建议迁移到 Cloud Tasks 或 Pub/Sub。
+- 转换队列：当前 MVP 使用 Cloud Run 进程内队列 + GCS JSON job 记录；下一阶段建议迁移到 Cloud Tasks 或 Pub/Sub。
 - 搜索：当前支持标题和基础元数据搜索；下一阶段提取 PDF/PPT 文本后支持正文搜索，再升级到 OpenSearch/Meilisearch/向量数据库。
 - 认证：当前内部小范围使用可暂不强制；后续如扩大使用范围，再接入内部 SSO、企业微信/飞书登录或账号密码登录。
 - 通知：发布成功后可自动发送群消息或邮件，消息中只包含固定链接和本期标题。

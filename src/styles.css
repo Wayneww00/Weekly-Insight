@@ -984,6 +984,10 @@ body {
   border-color: var(--accent);
 }
 
+.retry-preview {
+  margin-bottom: var(--space-lg);
+}
+
 .preview-stage {
   flex: 1;
   display: grid;
