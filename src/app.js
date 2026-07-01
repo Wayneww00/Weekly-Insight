@@ -665,7 +665,16 @@ function renderPreview(issue, file, fileUrl = "") {
             ${pageUrls
               .map((pageUrl, index) => `
                 <figure class="slide-page" data-slide-page="${index}">
-                  <img class="slide-image" data-slide-image src="${escapeHtml(pageUrl)}" alt="${escapeHtml(issue.title)} 第 ${index + 1} 页" loading="${index === 0 ? "eager" : "lazy"}" />
+                  <img
+                    class="slide-image"
+                    data-slide-image
+                    data-full-src="${escapeHtml(pageUrl)}"
+                    data-thumb-src="${escapeHtml(thumbUrls[index] || "")}"
+                    data-page-number="${index + 1}"
+                    src="${escapeHtml(getSlidePlaceholderSrc(index + 1, thumbUrls[index], pageUrl))}"
+                    alt="${escapeHtml(issue.title)} 第 ${index + 1} 页"
+                    loading="${index < 3 ? "eager" : "lazy"}"
+                  />
                 </figure>
               `)
               .join("")}
@@ -741,6 +750,12 @@ function renderPreview(issue, file, fileUrl = "") {
   `;
 }
 
+function getSlidePlaceholderSrc(pageNumber, thumbUrl, pageUrl) {
+  if (thumbUrl && thumbUrl !== pageUrl) return thumbUrl;
+  const label = encodeURIComponent(`第 ${pageNumber} 页`);
+  return `data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1600' height='900' viewBox='0 0 1600 900'%3E%3Crect width='1600' height='900' rx='18' fill='%23111720'/%3E%3Ctext x='800' y='450' text-anchor='middle' dominant-baseline='middle' fill='%237a8296' font-family='Arial,sans-serif' font-size='34'%3E${label}%3C/text%3E%3C/svg%3E`;
+}
+
 function bindSlideReader(slideReader) {
   if (!slideReader || typeof slideReader.querySelector !== "function") return;
   const pageUrls = JSON.parse(slideReader.dataset.pages || "[]");
@@ -748,11 +763,69 @@ function bindSlideReader(slideReader) {
   const thumbnailRail = slideReader.querySelector(".slide-thumbnails");
   const pages = [...slideReader.querySelectorAll("[data-slide-page]")];
   const thumbs = [...slideReader.querySelectorAll("[data-slide-thumb]")];
+  const preloadBefore = 2;
+  const preloadAfter = 3;
+  const maxRetries = 3;
+
+  const withRetryToken = (url, attempt) => {
+    if (attempt <= 0 || url.startsWith("data:") || url.startsWith("blob:")) return url;
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}retry=${attempt}`;
+  };
+
+  const setPageFailed = (page, img, index) => {
+    const thumbSrc = img.dataset.thumbSrc;
+    if (thumbSrc && img.src !== thumbSrc) {
+      img.onerror = null;
+      img.src = thumbSrc;
+    }
+    img.dataset.highState = "failed";
+    page.classList.remove("is-loading");
+    page.classList.add("is-failed");
+    const retryCount = Number(img.dataset.retryCount || 0);
+    if (retryCount < maxRetries) {
+      const delays = [500, 2000, 5000];
+      setTimeout(() => loadSlideImage(index, true), delays[retryCount] || 5000);
+    }
+  };
+
+  const loadSlideImage = (index, force = false) => {
+    const page = pages[index];
+    const img = page?.querySelector("[data-slide-image]");
+    if (!page || !img) return;
+    const fullSrc = img.dataset.fullSrc;
+    if (!fullSrc) return;
+    const state = img.dataset.highState || "idle";
+    if (!force && (state === "loading" || state === "loaded")) return;
+
+    const retryCount = force ? Number(img.dataset.retryCount || 0) + 1 : Number(img.dataset.retryCount || 0);
+    img.dataset.retryCount = String(retryCount);
+    img.dataset.highState = "loading";
+    page.classList.add("is-loading");
+    page.classList.remove("is-failed");
+
+    img.onload = () => {
+      img.dataset.highState = "loaded";
+      page.classList.remove("is-loading", "is-failed");
+    };
+    img.onerror = () => setPageFailed(page, img, index);
+    img.src = withRetryToken(fullSrc, retryCount);
+  };
+
+  const loadSlidesAround = (index) => {
+    if (!pageUrls.length) return;
+    const start = Math.max(0, index - preloadBefore);
+    const end = Math.min(pageUrls.length - 1, index + preloadAfter);
+    for (let nextIndex = start; nextIndex <= end; nextIndex += 1) {
+      loadSlideImage(nextIndex);
+    }
+  };
 
   const updateSlide = (index) => {
     if (!pageUrls.length) return;
     const nextIndex = Math.min(Math.max(index, 0), pageUrls.length - 1);
     slideReader.dataset.currentSlide = String(nextIndex);
+    loadSlidesAround(nextIndex);
     thumbs.forEach((thumb, index) => {
       thumb.classList.toggle("active", index === nextIndex);
       if (index === nextIndex && thumbnailRail) {
