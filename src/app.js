@@ -21,6 +21,7 @@ const state = {
   filterType: "",
   uploadDialogOpen: false,
   statusPollTimer: null,
+  expandedHistoryMonths: new Set(),
 
 };
 
@@ -386,6 +387,18 @@ function renderSidebar() {
       deleteIssue(item.dataset.deleteIssueId);
     });
   });
+  document.querySelectorAll("[data-history-month-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const monthKey = button.dataset.historyMonthToggle;
+      if (!monthKey) return;
+      if (state.expandedHistoryMonths.has(monthKey)) {
+        state.expandedHistoryMonths.delete(monthKey);
+      } else {
+        state.expandedHistoryMonths.add(monthKey);
+      }
+      renderSidebar();
+    });
+  });
 }
 
 function renderHistoryGroups(issues) {
@@ -397,15 +410,42 @@ function renderHistoryGroups(issues) {
   }, new Map());
 
   return [...groups.entries()]
-    .map(([monthKey, groupIssues]) => `
-      <section class="history-month">
-        <p class="history-month-label">${escapeHtml(formatMonthLabel(monthKey))}</p>
-        <div class="history-month-list">
-          ${groupIssues.map(renderNavItem).join("")}
-        </div>
-      </section>
-    `)
+    .map(([monthKey, groupIssues]) => {
+      const collapsed = isHistoryMonthCollapsed(monthKey, groupIssues);
+      const groupId = `history-month-${monthKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+      return `
+        <section class="history-month ${collapsed ? "is-collapsed" : ""}">
+          <button
+            class="history-month-toggle"
+            type="button"
+            data-history-month-toggle="${escapeHtml(monthKey)}"
+            aria-expanded="${String(!collapsed)}"
+            aria-controls="${groupId}"
+          >
+            <span>${escapeHtml(formatMonthLabel(monthKey))}</span>
+            <span class="history-month-meta">
+              <span>${groupIssues.length}</span>
+              <svg class="history-month-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="m4 5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </button>
+          <div id="${groupId}" class="history-month-list" ${collapsed ? "hidden" : ""}>
+            ${groupIssues.map(renderNavItem).join("")}
+          </div>
+        </section>
+      `;
+    })
     .join("");
+}
+
+function isHistoryMonthCollapsed(monthKey, groupIssues) {
+  const selectedId = selectedIssue()?.id;
+  const containsSelectedIssue = groupIssues.some((issue) => issue.id === selectedId);
+  const currentMonthKey = formatLocalDate(new Date()).slice(0, 7);
+  const isPastMonth = /^\d{4}-\d{2}$/.test(monthKey) && monthKey < currentMonthKey;
+
+  return isPastMonth && !containsSelectedIssue && !state.expandedHistoryMonths.has(monthKey);
 }
 
 function renderNavItem(issue) {

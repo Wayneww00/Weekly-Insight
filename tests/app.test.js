@@ -141,6 +141,8 @@ globalThis.__appTest = {
   renderViewerSummary,
   renderViewerMeta,
   renderPreview,
+  renderHistoryGroups,
+  isHistoryMonthCollapsed,
   getConversionProgress,
   bindSlideReader,
   handleUpload: typeof handleUpload === "function" ? handleUpload : undefined,
@@ -194,6 +196,25 @@ test("search covers title, summary, category, and tags", () => {
 
   app.state.searchQuery = "基础设施";
   assert.equal(app.getFilteredIssues().map((issue) => issue.id).join(","), "search-weekly");
+});
+
+test("collapses past archive months while keeping the current month open", () => {
+  const app = loadApp();
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [year, month] = currentMonth.split("-").map(Number);
+  const previous = new Date(year, month - 2, 1).toISOString().slice(0, 7);
+  const issues = [
+    { id: "current-month", fileName: "current.pdf", issueDate: `${currentMonth}-01`, insightType: "weekly", createdAt: "2026-01-01" },
+    { id: "previous-month", fileName: "previous.pdf", issueDate: `${previous}-01`, insightType: "weekly", createdAt: "2026-01-01" },
+  ];
+
+  app.state.issues = issues;
+  app.state.selectedIssueId = "current-month";
+  const html = app.renderHistoryGroups(issues);
+
+  assert.equal(html.includes(`data-history-month-toggle=\"${previous}\"`), true);
+  assert.equal(html.includes(`id=\"history-month-${previous}\" class=\"history-month-list\" hidden`), true);
+  assert.equal(html.includes(`id=\"history-month-${currentMonth}\" class=\"history-month-list\" hidden`), false);
 });
 
 test("accepts only ppt, pptx, and pdf uploads by extension", () => {
