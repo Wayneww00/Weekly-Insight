@@ -1,4 +1,5 @@
 const { readDb } = require("./_lib/blob-store");
+const { requireSession } = require("./_lib/auth");
 const { methodNotAllowed, sendJson, sortIssues } = require("./_lib/shared");
 
 module.exports = async function handler(request, response) {
@@ -6,6 +7,7 @@ module.exports = async function handler(request, response) {
     methodNotAllowed(response);
     return;
   }
+  if (!requireSession(request, response)) return;
 
   try {
     const db = await readDb();

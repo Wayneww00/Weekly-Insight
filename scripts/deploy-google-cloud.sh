@@ -5,6 +5,10 @@ PROJECT_ID="${PROJECT_ID:-project-e231c77e-076f-46db-acb}"
 REGION="${REGION:-asia-southeast1}"
 SERVICE_NAME="${SERVICE_NAME:-weekly-insight}"
 BUCKET_NAME="${BUCKET_NAME:-${PROJECT_ID}-weekly-insight-assets}"
+INSIGHT_AUTH_EMAIL="${INSIGHT_AUTH_EMAIL:-admin@vtg.bot}"
+
+: "${INSIGHT_AUTH_PASSWORD:?Set INSIGHT_AUTH_PASSWORD before deployment.}"
+: "${SESSION_SECRET:?Set SESSION_SECRET (at least 32 characters) before deployment.}"
 
 gcloud config set project "$PROJECT_ID"
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com storage.googleapis.com
@@ -23,7 +27,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
-  --set-env-vars "GCS_BUCKET=${BUCKET_NAME},PREVIEW_DPI=300,THUMBNAIL_DPI=42,CONVERSION_TIMEOUT_MS=900000" \
+  --set-env-vars "GCS_BUCKET=${BUCKET_NAME},PREVIEW_DPI=300,THUMBNAIL_DPI=42,CONVERSION_TIMEOUT_MS=900000,INSIGHT_AUTH_EMAIL=${INSIGHT_AUTH_EMAIL},INSIGHT_AUTH_PASSWORD=${INSIGHT_AUTH_PASSWORD},SESSION_SECRET=${SESSION_SECRET}" \
   --memory 4Gi \
   --cpu 2 \
   --timeout 900 \

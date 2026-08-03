@@ -22,7 +22,8 @@ const state = {
   uploadDialogOpen: false,
   statusPollTimer: null,
   expandedHistoryMonths: new Set(),
-
+  user: null,
+  appStarted: false,
 };
 
 const els = {
@@ -49,6 +50,14 @@ const els = {
   sidebar: document.querySelector("#sidebar"),
   sidebarToggle: document.querySelector("#sidebar-toggle"),
   sidebarOverlay: document.querySelector("#sidebar-overlay"),
+  loginScreen: document.querySelector("#login-screen"),
+  appShell: document.querySelector("#app-shell"),
+  loginForm: document.querySelector("#login-form"),
+  loginEmail: document.querySelector("#login-email"),
+  loginPassword: document.querySelector("#login-password"),
+  loginError: document.querySelector("#login-error"),
+  loginSubmit: document.querySelector("#login-submit"),
+  logoutButton: document.querySelector("#logout-button"),
 };
 
 initialize();
@@ -58,12 +67,108 @@ initialize();
    ============================================ */
 
 function initialize() {
+  bindAuthEvents();
+  restoreSession();
+}
+
+function startApp(user) {
+  if (state.appStarted) return;
+  state.appStarted = true;
+  state.user = user;
+  els.loginScreen.hidden = true;
+  els.appShell.hidden = false;
   clearStoredFilesOnce();
   els.issueDate.value = formatLocalDate(new Date());
   state.selectedIssueId = latestIssue()?.id || state.issues[0]?.id || null;
   bindEvents();
   render();
   hydrateIssuesFromServer();
+}
+
+function bindAuthEvents() {
+  els.loginForm?.addEventListener("submit", handleLogin);
+  els.logoutButton?.addEventListener("click", handleLogout);
+}
+
+async function restoreSession() {
+  if (typeof fetch !== "function") {
+    showLogin("无法连接登录服务，请通过 Insight Hub 服务地址访问。");
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/auth/session", { credentials: "same-origin" });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.user) {
+      startApp(payload.user);
+      return;
+    }
+  } catch {
+    // Keep the login page visible; the next explicit login gives a clear error.
+  }
+  showLogin();
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  if (typeof fetch !== "function") {
+    showLogin("无法连接登录服务，请稍后重试。");
+    return;
+  }
+
+  const email = els.loginEmail.value.trim();
+  const password = els.loginPassword.value;
+  if (!email || !password) {
+    showLogin("请输入邮箱和密码。");
+    return;
+  }
+
+  els.loginSubmit.disabled = true;
+  els.loginSubmit.textContent = "登录中…";
+  els.loginError.hidden = true;
+  try {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ email, password }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.user) {
+      throw new Error(payload.error || "邮箱或密码不正确。");
+    }
+    els.loginPassword.value = "";
+    startApp(payload.user);
+  } catch (error) {
+    showLogin(error.message || "登录失败，请稍后重试。");
+  } finally {
+    els.loginSubmit.disabled = false;
+    els.loginSubmit.textContent = "登录";
+  }
+}
+
+async function handleLogout() {
+  try {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  } finally {
+    if (state.statusPollTimer) clearInterval(state.statusPollTimer);
+    state.statusPollTimer = null;
+    state.appStarted = false;
+    state.user = null;
+    state.issues = [];
+    state.selectedIssueId = null;
+    els.appShell.hidden = true;
+    els.loginPassword.value = "";
+    showLogin();
+  }
+}
+
+function showLogin(message = "") {
+  els.loginScreen.hidden = false;
+  els.appShell.hidden = true;
+  els.loginError.textContent = message;
+  els.loginError.hidden = !message;
+  if (message) els.loginPassword?.focus?.();
 }
 
 function bindEvents() {

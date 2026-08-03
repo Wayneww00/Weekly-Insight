@@ -13,7 +13,38 @@
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
-    <main class="app-layout">
+    <main id="login-screen" class="login-screen">
+      <section class="login-card" aria-labelledby="login-title">
+        <div class="login-brand">
+          <div class="login-logo-mark" aria-hidden="true">
+            <img src="./assets/vantage-logo-white.svg" alt="" />
+          </div>
+          <div>
+            <strong>Vantage BI Digest</strong>
+            <span>竞品情报监测平台</span>
+          </div>
+        </div>
+        <div class="login-divider"></div>
+        <div class="login-heading">
+          <h1 id="login-title">登录</h1>
+          <p>请输入已获授权的账号和密码。</p>
+        </div>
+        <form id="login-form" class="login-form">
+          <label>
+            <span>邮箱</span>
+            <input id="login-email" name="email" type="email" value="admin@vtg.bot" autocomplete="username" required />
+          </label>
+          <label>
+            <span>密码</span>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p id="login-error" class="login-error" role="alert" hidden></p>
+          <button id="login-submit" class="login-submit" type="submit">登录</button>
+        </form>
+      </section>
+    </main>
+
+    <main id="app-shell" class="app-layout" hidden>
       <!-- Mobile header: only visible on small screens -->
       <header class="mobile-header">
         <div class="brand">
@@ -71,6 +102,14 @@
             上传 PPT / PDF
           </button>
           <p id="sidebar-status" class="sidebar-status" hidden></p>
+          <div class="account-actions">
+            <button id="logout-button" type="button">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M6.5 2.25H3.75A1.75 1.75 0 0 0 2 4v8a1.75 1.75 0 0 0 1.75 1.75H6.5M9.25 5.25 12 8l-2.75 2.75M12 8H5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              退出登录
+            </button>
+          </div>
         </div>
       </aside>
 

@@ -1,7 +1,9 @@
 const { readDb, updateDb } = require("./_lib/blob-store");
+const { requireSession } = require("./_lib/auth");
 const { methodNotAllowed, parseUrl, sanitizeSegment, sendJson, sortIssues } = require("./_lib/shared");
 
 module.exports = async function handler(request, response) {
+  if (!requireSession(request, response)) return;
   if (request.method === "GET") {
     await getIssue(request, response);
     return;

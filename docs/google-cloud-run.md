@@ -15,6 +15,9 @@
 ## Deploy
 
 ```bash
+export INSIGHT_AUTH_PASSWORD='use-a-strong-unique-password'
+export SESSION_SECRET="$(openssl rand -base64 48)"
+
 PROJECT_ID=project-e231c77e-076f-46db-acb \
 REGION=asia-southeast1 \
 SERVICE_NAME=weekly-insight \
@@ -29,3 +32,4 @@ The script creates a Cloud Storage bucket if needed and deploys the container to
 - `--no-cpu-throttling` keeps CPU available after the upload response returns, so the background LibreOffice/Poppler conversion can finish reliably.
 - `CONVERSION_TIMEOUT_MS=900000` gives large PPT/PDF files up to 15 minutes to convert and render page previews.
 - For heavier team usage, replace the JSON metadata file with Firestore or Cloud SQL.
+- The application requires authentication. The login email defaults to `admin@vtg.bot`; override it with `INSIGHT_AUTH_EMAIL` if needed. `INSIGHT_AUTH_PASSWORD` and a random `SESSION_SECRET` are mandatory and must never be committed to the repository. For a long-lived production deployment, store both in Secret Manager rather than shell history.

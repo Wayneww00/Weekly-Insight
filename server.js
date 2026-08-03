@@ -3,6 +3,7 @@ const { execFile } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
+const crypto = require("node:crypto");
 const { promisify } = require("node:util");
 const { Storage } = require("@google-cloud/storage");
 
@@ -22,6 +23,8 @@ const storage = isCloudStorageEnabled ? new Storage() : null;
 const conversionQueue = [];
 let conversionRunning = false;
 let dbWriteQueue = Promise.resolve();
+const loginAttempts = new Map();
+const sessionDurationSeconds = 60 * 60 * 24 * 7;
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -38,6 +41,25 @@ const mimeTypes = {
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url || "/", `http://localhost:${port}`);
+
+    if (url.pathname === "/api/auth/session" && request.method === "GET") {
+      handleSessionRequest(request, response);
+      return;
+    }
+
+    if (url.pathname === "/api/auth/login" && request.method === "POST") {
+      await handleLoginRequest(request, response);
+      return;
+    }
+
+    if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+      handleLogoutRequest(request, response);
+      return;
+    }
+
+    if ((url.pathname.startsWith("/api/") || url.pathname.startsWith("/storage/") || url.pathname.startsWith("/data/")) && !requireAuthenticatedSession(request, response)) {
+      return;
+    }
 
     if (request.method === "GET" && url.pathname === "/api/issues") {
       await handleListIssuesRequest(response);
@@ -89,6 +111,62 @@ const server = http.createServer(async (request, response) => {
     writeJson(response, 500, { error: "Server error.", message: error.message });
   }
 });
+
+function handleSessionRequest(request, response) {
+  const session = getSessionFromRequest(request);
+  if (!session) {
+    writeJson(response, 401, { error: "未登录。" });
+    return;
+  }
+  writeJson(response, 200, { user: { email: session.email, role: "admin" } });
+}
+
+async function handleLoginRequest(request, response) {
+  const config = getAuthConfig();
+  if (!config.isConfigured) {
+    writeJson(response, 503, { error: "登录服务尚未配置。请联系管理员设置 INSIGHT_AUTH_PASSWORD 和 SESSION_SECRET。" });
+    return;
+  }
+
+  const attemptKey = getClientAddress(request);
+  const attempt = loginAttempts.get(attemptKey);
+  if (attempt?.blockedUntil > Date.now()) {
+    writeJson(response, 429, { error: "登录尝试次数过多，请 15 分钟后再试。" });
+    return;
+  }
+
+  const payload = await readJsonBody(request);
+  const email = String(payload.email || "").trim().toLowerCase();
+  const password = String(payload.password || "");
+  const validEmail = safeEqual(email, config.email.toLowerCase());
+  const validPassword = safeEqual(password, config.password);
+
+  if (!validEmail || !validPassword) {
+    registerFailedLogin(attemptKey);
+    writeJson(response, 401, { error: "邮箱或密码不正确。" });
+    return;
+  }
+
+  loginAttempts.delete(attemptKey);
+  setSessionCookie(request, response, createSession(config.email, config.secret));
+  writeJson(response, 200, { user: { email: config.email, role: "admin" } });
+}
+
+function handleLogoutRequest(request, response) {
+  clearSessionCookie(request, response);
+  writeJson(response, 200, { ok: true });
+}
+
+function requireAuthenticatedSession(request, response) {
+  if (getSessionFromRequest(request)) return true;
+  if ((request.url || "").startsWith("/api/")) {
+    writeJson(response, 401, { error: "请先登录。" });
+  } else {
+    response.writeHead(401, { "Cache-Control": "no-store" });
+    response.end("Unauthorized");
+  }
+  return false;
+}
 
 async function handleListIssuesRequest(response) {
   const db = await readDb();
@@ -1131,6 +1209,94 @@ function sanitizeDate(value) {
 
 function sanitizeFileName(value) {
   return path.basename(String(value)).replace(/[^\w.\- ()\u4e00-\u9fff]/g, "_");
+}
+
+function getAuthConfig() {
+  const email = process.env.INSIGHT_AUTH_EMAIL || "admin@vtg.bot";
+  const password = process.env.INSIGHT_AUTH_PASSWORD || "";
+  const secret = process.env.SESSION_SECRET || "";
+  return {
+    email,
+    password,
+    secret,
+    isConfigured: Boolean(password && secret.length >= 32),
+  };
+}
+
+function createSession(email, secret) {
+  const payload = Buffer.from(JSON.stringify({
+    email,
+    expiresAt: Date.now() + sessionDurationSeconds * 1000,
+  })).toString("base64url");
+  const signature = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function getSessionFromRequest(request) {
+  const config = getAuthConfig();
+  if (!config.isConfigured) return null;
+  const token = parseCookies(request.headers.cookie || "").insight_session;
+  if (!token || !token.includes(".")) return null;
+
+  const [payload, signature, ...rest] = token.split(".");
+  if (!payload || !signature || rest.length) return null;
+  const expectedSignature = crypto.createHmac("sha256", config.secret).update(payload).digest("base64url");
+  if (!safeEqual(signature, expectedSignature)) return null;
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!session?.email || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now()) return null;
+    if (!safeEqual(String(session.email).toLowerCase(), config.email.toLowerCase())) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+function parseCookies(cookieHeader) {
+  return String(cookieHeader)
+    .split(";")
+    .reduce((cookies, part) => {
+      const separator = part.indexOf("=");
+      if (separator < 0) return cookies;
+      const key = part.slice(0, separator).trim();
+      const value = part.slice(separator + 1).trim();
+      if (key) cookies[key] = value;
+      return cookies;
+    }, {});
+}
+
+function setSessionCookie(request, response, token) {
+  response.setHeader("Set-Cookie", `insight_session=${token}; ${sessionCookieOptions(request)}; Max-Age=${sessionDurationSeconds}`);
+}
+
+function clearSessionCookie(request, response) {
+  response.setHeader("Set-Cookie", `insight_session=; ${sessionCookieOptions(request)}; Max-Age=0`);
+}
+
+function sessionCookieOptions(request) {
+  const forwardedProto = String(request.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const secure = forwardedProto === "https" || process.env.NODE_ENV === "production";
+  return `Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+}
+
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function getClientAddress(request) {
+  return String(request.headers["x-forwarded-for"] || request.socket.remoteAddress || "unknown").split(",")[0].trim();
+}
+
+function registerFailedLogin(address) {
+  const existing = loginAttempts.get(address) || { count: 0, blockedUntil: 0 };
+  const count = existing.count + 1;
+  loginAttempts.set(address, {
+    count,
+    blockedUntil: count >= 5 ? Date.now() + 15 * 60 * 1000 : 0,
+  });
 }
 
 function writeJson(response, statusCode, payload) {

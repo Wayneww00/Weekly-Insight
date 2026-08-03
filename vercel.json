@@ -16,6 +16,13 @@
       }
     },
     {
+      "src": "api/auth/*.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
       "src": "api/worker/claim.js",
       "use": "@vercel/node",
       "config": {
