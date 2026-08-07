@@ -10,8 +10,8 @@
 
 - `BLOB_READ_WRITE_TOKEN`: Vercel Blob token.
 - `WORKER_SECRET`: shared secret used by the worker API.
-- `INSIGHT_AUTH_EMAIL`: login email; defaults to `admin@vtg.bot` when omitted.
-- `INSIGHT_AUTH_PASSWORD`: strong login password.
+- `INSIGHT_AUTH_EMAIL`: login email; defaults to `admin@vtg.com` when omitted.
+- `INSIGHT_AUTH_PASSWORD`: login password; defaults to `admin123456` when omitted.
 - `SESSION_SECRET`: a random string of at least 32 characters, for example `openssl rand -base64 48`.
 
 ## Worker Environment Variables

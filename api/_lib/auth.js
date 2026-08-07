@@ -4,8 +4,8 @@ const { sendJson } = require("./shared");
 const sessionDurationSeconds = 60 * 60 * 24 * 7;
 
 function getAuthConfig() {
-  const email = process.env.INSIGHT_AUTH_EMAIL || "admin@vtg.bot";
-  const password = process.env.INSIGHT_AUTH_PASSWORD || "";
+  const email = process.env.INSIGHT_AUTH_EMAIL || "admin@vtg.com";
+  const password = process.env.INSIGHT_AUTH_PASSWORD || "admin123456";
   const secret = process.env.SESSION_SECRET || "";
   return { email, password, secret, isConfigured: Boolean(password && secret.length >= 32) };
 }

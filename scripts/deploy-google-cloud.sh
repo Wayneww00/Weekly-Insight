@@ -5,9 +5,9 @@ PROJECT_ID="${PROJECT_ID:-project-e231c77e-076f-46db-acb}"
 REGION="${REGION:-asia-southeast1}"
 SERVICE_NAME="${SERVICE_NAME:-weekly-insight}"
 BUCKET_NAME="${BUCKET_NAME:-${PROJECT_ID}-weekly-insight-assets}"
-INSIGHT_AUTH_EMAIL="${INSIGHT_AUTH_EMAIL:-admin@vtg.bot}"
+INSIGHT_AUTH_EMAIL="${INSIGHT_AUTH_EMAIL:-admin@vtg.com}"
+INSIGHT_AUTH_PASSWORD="${INSIGHT_AUTH_PASSWORD:-admin123456}"
 
-: "${INSIGHT_AUTH_PASSWORD:?Set INSIGHT_AUTH_PASSWORD before deployment.}"
 : "${SESSION_SECRET:?Set SESSION_SECRET (at least 32 characters) before deployment.}"
 
 gcloud config set project "$PROJECT_ID"
