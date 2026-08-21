@@ -33,4 +33,6 @@ The script creates a Cloud Storage bucket if needed and deploys the container to
 - `--no-cpu-throttling` keeps CPU available after the upload response returns, so the background LibreOffice/Poppler conversion can finish reliably.
 - `CONVERSION_TIMEOUT_MS=900000` gives large PPT/PDF files up to 15 minutes to convert and render page previews.
 - For heavier team usage, replace the JSON metadata file with Firestore or Cloud SQL.
-- The application requires authentication. The login email defaults to `admin@vtg.com` and the password defaults to `admin123456`; override them with `INSIGHT_AUTH_EMAIL` and `INSIGHT_AUTH_PASSWORD` when needed. A random `SESSION_SECRET` is mandatory. For a long-lived production deployment, store the credentials and session secret in Secret Manager rather than shell history.
+- The application requires authentication. `INSIGHT_AUTH_EMAIL` and `INSIGHT_AUTH_PASSWORD` configure the administrator account; bundled team accounts in `config/auth-users.json` are read-only and store only scrypt password hashes.
+- Additional runtime users can be supplied with `INSIGHT_AUTH_USERS_JSON`, using a JSON array of `{ "email", "password", "role" }` objects. A random `SESSION_SECRET` is mandatory.
+- For a long-lived production deployment, store administrator credentials, runtime users, and the session secret in Secret Manager rather than shell history.

@@ -20,6 +20,8 @@ RUN npm ci --omit=dev
 COPY index.html ./index.html
 COPY assets ./assets
 COPY src ./src
+COPY config ./config
+COPY auth-config.js ./auth-config.js
 COPY server.js ./server.js
 
 CMD ["npm", "start"]

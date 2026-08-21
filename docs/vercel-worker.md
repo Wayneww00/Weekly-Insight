@@ -12,6 +12,7 @@
 - `WORKER_SECRET`: shared secret used by the worker API.
 - `INSIGHT_AUTH_EMAIL`: login email; defaults to `admin@vtg.com` when omitted.
 - `INSIGHT_AUTH_PASSWORD`: login password; defaults to `admin123456` when omitted.
+- `INSIGHT_AUTH_USERS_JSON`: optional JSON array of additional runtime users. Bundled team accounts in `config/auth-users.json` are read-only and use scrypt password hashes.
 - `SESSION_SECRET`: a random string of at least 32 characters, for example `openssl rand -base64 48`.
 
 ## Worker Environment Variables

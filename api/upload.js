@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { requireSession } = require("./_lib/auth");
+const { requireAdminSession } = require("./_lib/auth");
 const { uploadBlob, upsertAsset, upsertIssue } = require("./_lib/blob-store");
 const {
   generateIssueTitle,
@@ -18,7 +18,7 @@ module.exports = async function handler(request, response) {
     methodNotAllowed(response);
     return;
   }
-  if (!requireSession(request, response)) return;
+  if (!requireAdminSession(request, response)) return;
 
   try {
     const url = parseUrl(request);

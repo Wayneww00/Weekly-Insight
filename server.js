@@ -6,6 +6,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { promisify } = require("node:util");
 const { Storage } = require("@google-cloud/storage");
+const { authenticateUser, findUserByEmail, getAuthConfig, safeEqual } = require("./auth-config");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
@@ -72,31 +73,37 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && url.pathname === "/api/issues/import") {
+      if (!requireAdminSession(request, response)) return;
       await handleImportIssuesRequest(request, response);
       return;
     }
 
     if (request.method === "POST" && url.pathname === "/api/upload") {
+      if (!requireAdminSession(request, response)) return;
       await handleUploadRequest(request, url, response);
       return;
     }
 
     if (request.method === "POST" && url.pathname === "/api/upload/initiate") {
+      if (!requireAdminSession(request, response)) return;
       await handleUploadInitiateRequest(request, response);
       return;
     }
 
     if (request.method === "POST" && url.pathname === "/api/upload/complete") {
+      if (!requireAdminSession(request, response)) return;
       await handleUploadCompleteRequest(request, response);
       return;
     }
 
     if (request.method === "DELETE" && url.pathname === "/api/issue") {
+      if (!requireAdminSession(request, response)) return;
       await handleDeleteIssueRequest(url, response);
       return;
     }
 
     if (request.method === "POST" && url.pathname === "/api/issue/retry") {
+      if (!requireAdminSession(request, response)) return;
       await handleRetryIssueRequest(url, response);
       return;
     }
@@ -118,7 +125,7 @@ function handleSessionRequest(request, response) {
     writeJson(response, 401, { error: "未登录。" });
     return;
   }
-  writeJson(response, 200, { user: { email: session.email, role: "admin" } });
+  writeJson(response, 200, { user: { email: session.email, role: session.role } });
 }
 
 async function handleLoginRequest(request, response) {
@@ -138,18 +145,17 @@ async function handleLoginRequest(request, response) {
   const payload = await readJsonBody(request);
   const email = String(payload.email || "").trim().toLowerCase();
   const password = String(payload.password || "");
-  const validEmail = safeEqual(email, config.email.toLowerCase());
-  const validPassword = safeEqual(password, config.password);
+  const user = authenticateUser(config, email, password);
 
-  if (!validEmail || !validPassword) {
+  if (!user) {
     registerFailedLogin(attemptKey);
     writeJson(response, 401, { error: "邮箱或密码不正确。" });
     return;
   }
 
   loginAttempts.delete(attemptKey);
-  setSessionCookie(request, response, createSession(config.email, config.secret));
-  writeJson(response, 200, { user: { email: config.email, role: "admin" } });
+  setSessionCookie(request, response, createSession(user, config.secret));
+  writeJson(response, 200, { user });
 }
 
 function handleLogoutRequest(request, response) {
@@ -158,7 +164,11 @@ function handleLogoutRequest(request, response) {
 }
 
 function requireAuthenticatedSession(request, response) {
-  if (getSessionFromRequest(request)) return true;
+  const session = getSessionFromRequest(request);
+  if (session) {
+    request.authSession = session;
+    return true;
+  }
   if ((request.url || "").startsWith("/api/")) {
     writeJson(response, 401, { error: "请先登录。" });
   } else {
@@ -166,6 +176,13 @@ function requireAuthenticatedSession(request, response) {
     response.end("Unauthorized");
   }
   return false;
+}
+
+function requireAdminSession(request, response) {
+  const session = request.authSession || getSessionFromRequest(request);
+  if (session?.role === "admin") return session;
+  writeJson(response, 403, { error: "当前账号没有内容管理权限。" });
+  return null;
 }
 
 async function handleListIssuesRequest(response) {
@@ -1211,21 +1228,10 @@ function sanitizeFileName(value) {
   return path.basename(String(value)).replace(/[^\w.\- ()\u4e00-\u9fff]/g, "_");
 }
 
-function getAuthConfig() {
-  const email = process.env.INSIGHT_AUTH_EMAIL || "admin@vtg.com";
-  const password = process.env.INSIGHT_AUTH_PASSWORD || "admin123456";
-  const secret = process.env.SESSION_SECRET || "";
-  return {
-    email,
-    password,
-    secret,
-    isConfigured: Boolean(password && secret.length >= 32),
-  };
-}
-
-function createSession(email, secret) {
+function createSession(user, secret) {
   const payload = Buffer.from(JSON.stringify({
-    email,
+    email: user.email,
+    role: user.role,
     expiresAt: Date.now() + sessionDurationSeconds * 1000,
   })).toString("base64url");
   const signature = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
@@ -1246,8 +1252,8 @@ function getSessionFromRequest(request) {
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     if (!session?.email || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now()) return null;
-    if (!safeEqual(String(session.email).toLowerCase(), config.email.toLowerCase())) return null;
-    return session;
+    const user = findUserByEmail(config, session.email);
+    return user ? { ...session, email: user.email, role: user.role } : null;
   } catch {
     return null;
   }
@@ -1278,12 +1284,6 @@ function sessionCookieOptions(request) {
   const forwardedProto = String(request.headers["x-forwarded-proto"] || "").split(",")[0].trim();
   const secure = forwardedProto === "https" || process.env.NODE_ENV === "production";
   return `Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
-}
-
-function safeEqual(left, right) {
-  const leftBuffer = Buffer.from(String(left));
-  const rightBuffer = Buffer.from(String(right));
-  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function getClientAddress(request) {

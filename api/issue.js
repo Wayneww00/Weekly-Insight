@@ -1,15 +1,16 @@
 const { readDb, updateDb } = require("./_lib/blob-store");
-const { requireSession } = require("./_lib/auth");
+const { requireAdminSession, requireSession } = require("./_lib/auth");
 const { methodNotAllowed, parseUrl, sanitizeSegment, sendJson, sortIssues } = require("./_lib/shared");
 
 module.exports = async function handler(request, response) {
-  if (!requireSession(request, response)) return;
   if (request.method === "GET") {
+    if (!requireSession(request, response)) return;
     await getIssue(request, response);
     return;
   }
 
   if (request.method === "DELETE") {
+    if (!requireAdminSession(request, response)) return;
     await deleteIssue(request, response);
     return;
   }

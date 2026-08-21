@@ -1,4 +1,5 @@
-const { createSession, getAuthConfig, safeEqual, setSessionCookie } = require("../_lib/auth");
+const { authenticateUser } = require("../../auth-config");
+const { createSession, getAuthConfig, setSessionCookie } = require("../_lib/auth");
 const { methodNotAllowed, readJsonBody, sendJson } = require("../_lib/shared");
 
 module.exports = async function handler(request, response) {
@@ -10,11 +11,12 @@ module.exports = async function handler(request, response) {
     const payload = await readJsonBody(request);
     const email = String(payload.email || "").trim().toLowerCase();
     const password = String(payload.password || "");
-    if (!safeEqual(email, config.email.toLowerCase()) || !safeEqual(password, config.password)) {
+    const user = authenticateUser(config, email, password);
+    if (!user) {
       return sendJson(response, 401, { error: "邮箱或密码不正确。" });
     }
-    setSessionCookie(request, response, createSession(config.email, config.secret));
-    sendJson(response, 200, { user: { email: config.email, role: "admin" } });
+    setSessionCookie(request, response, createSession(user, config.secret));
+    sendJson(response, 200, { user });
   } catch {
     sendJson(response, 400, { error: "登录请求无效。" });
   }

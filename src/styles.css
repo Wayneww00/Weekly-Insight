@@ -416,6 +416,14 @@ body {
   transition: background 0.12s, color 0.12s;
 }
 
+.nav-item.read-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.nav-item.read-only .nav-open {
+  padding-right: 12px;
+}
+
 .nav-item:hover {
   background: var(--bg-hover);
   color: var(--ink-200);

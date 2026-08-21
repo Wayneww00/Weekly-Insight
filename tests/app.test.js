@@ -153,6 +153,7 @@ globalThis.__appTest = {
 };`,
     context
   );
+  context.__appTest.state.user = { email: "admin@vtg.com", role: "admin" };
   return context.__appTest;
 }
 

@@ -1,14 +1,8 @@
 const crypto = require("node:crypto");
+const { findUserByEmail, getAuthConfig, safeEqual } = require("../../auth-config");
 const { sendJson } = require("./shared");
 
 const sessionDurationSeconds = 60 * 60 * 24 * 7;
-
-function getAuthConfig() {
-  const email = process.env.INSIGHT_AUTH_EMAIL || "admin@vtg.com";
-  const password = process.env.INSIGHT_AUTH_PASSWORD || "admin123456";
-  const secret = process.env.SESSION_SECRET || "";
-  return { email, password, secret, isConfigured: Boolean(password && secret.length >= 32) };
-}
 
 function getSession(request) {
   const config = getAuthConfig();
@@ -22,7 +16,8 @@ function getSession(request) {
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     if (!session?.email || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now()) return null;
-    return safeEqual(String(session.email).toLowerCase(), config.email.toLowerCase()) ? session : null;
+    const user = findUserByEmail(config, session.email);
+    return user ? { ...session, email: user.email, role: user.role } : null;
   } catch {
     return null;
   }
@@ -35,8 +30,20 @@ function requireSession(request, response) {
   return null;
 }
 
-function createSession(email, secret) {
-  const payload = Buffer.from(JSON.stringify({ email, expiresAt: Date.now() + sessionDurationSeconds * 1000 })).toString("base64url");
+function requireAdminSession(request, response) {
+  const session = requireSession(request, response);
+  if (!session) return null;
+  if (session.role === "admin") return session;
+  sendJson(response, 403, { error: "当前账号没有内容管理权限。" });
+  return null;
+}
+
+function createSession(user, secret) {
+  const payload = Buffer.from(JSON.stringify({
+    email: user.email,
+    role: user.role,
+    expiresAt: Date.now() + sessionDurationSeconds * 1000,
+  })).toString("base64url");
   const signature = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
   return `${payload}.${signature}`;
 }
@@ -65,17 +72,12 @@ function parseCookies(header) {
   }, {});
 }
 
-function safeEqual(left, right) {
-  const leftBuffer = Buffer.from(String(left));
-  const rightBuffer = Buffer.from(String(right));
-  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
-}
-
 module.exports = {
   clearSessionCookie,
   createSession,
   getAuthConfig,
   getSession,
+  requireAdminSession,
   requireSession,
   safeEqual,
   setSessionCookie,

@@ -1,0 +1,359 @@
+{
+  "users": [
+    {
+      "email": "alexwu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$w20fDA-IqcS4tOQ9HFqZvw$UEw6anE9vgV6mygvqtFaFNjnwL92unhwMynvIffR9jPxf7JqYjfKHx7nAaAhN2yPoILzmsR6M71RtAhFl0Kzdw",
+      "role": "reader"
+    },
+    {
+      "email": "allenleong@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$7LJV-T0eRDC4407eB8Yamw$PaxsiDBC6d7VfRTmPrUMPpB0Y4iGt62Sqti9Ff8Q6uxn0o-N6dn-2jyBokW7JqiyzNJoB_juKoXRMS4IR4xagA",
+      "role": "reader"
+    },
+    {
+      "email": "amysu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$35HfQcDkl0ZXolj555Tfaw$OiSpaOtx3f8p04yVbIsGQwmcPOHtLOQSY_N6K9Hz0MjaYhFZS5xhqFtNPz04SsAyoJz1A_MY3Zo8Cq1gngN2KQ",
+      "role": "reader"
+    },
+    {
+      "email": "blairwu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$-wsOggNi50amLYBk0xb3Hg$oyiMyVXDZwhA9nh0zSqHs0QyRZWD27CVmAw_7ooP2VtvkxbXpjKsvmUZ2smuu1G5kevktGOyFbpINg9mROrfYA",
+      "role": "reader"
+    },
+    {
+      "email": "chamberdeng@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$n1RvlmwxuQmgRh8jjGjsnA$BxuK6tYOcLun5wmnhKXe9OeZibDwGo2B4IS1mguW5Kbkxv_rCTwlrnybNIttgp8Vwk9vU10AfcAwg6ExNetpQg",
+      "role": "reader"
+    },
+    {
+      "email": "chawaponk@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$V2sBHzHIFPaSVpMD_bKOoQ$omfWozGUsJMJqdZcuagntHmL1QKmG2GvH9_eSwk1Gjm8VhuRE3IdSsBMmj14oYsN1KVl_iDm0OmkARiWhHgsqw",
+      "role": "reader"
+    },
+    {
+      "email": "cherylxu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$0pTQFePygrmCfJq_TnMMsg$2zPYZdVahRKVtUjQnq-S-7te6p6ix1AWY_Ohy1zoBQqg7dklS5RvOlZumnDpQ1-kWm0tFCZXsS75pv8Y1mEvGg",
+      "role": "reader"
+    },
+    {
+      "email": "chinhoevquan@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$pfoL2HShBQES4DbfC5R7qg$LOnby-vbPwXgXmhInoGbydghzyrlyfORBB26ZHKaBaPGrx2kMJF42F2uhXuib3yem9CCzbla7klM7gBEz6b5gA",
+      "role": "reader"
+    },
+    {
+      "email": "clarashen@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$GL-qGjqIB9yppJenNdtnPQ$e2wAq5dpQrOzEX8stk9UBUS6kDk_AZesqlpBO1eof3g7LbdIs1Wp0mPSwJyIrM7bj2yQJaFfiATjlbmNq-bFng",
+      "role": "reader"
+    },
+    {
+      "email": "cristallneo@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$aABFqF5UOTbpY2Z_QmxaTw$xNSUXXDsSwUpDFNQ-DSoES9Tt8JTxA4gL8kEHnH__D9_YFay5LDLiQz2UNm5_vU8EIfdDL4mx-sjjE_gzCu_5Q",
+      "role": "reader"
+    },
+    {
+      "email": "curryzhao@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$U7LcH5wQNo_GmL37YArnvQ$SFQcPmjee_JSOYJISTcMCsjL6oWedXE9qxzuBm76C2ZsyOXjvrTcHT0Zge-0CFShT4iUfzrwbVAk7croDKR8Pg",
+      "role": "reader"
+    },
+    {
+      "email": "doreenwang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$b7_r5bkAGdgccx34AsvpDg$245aI0gNnq3wqqiYhgBpawc7qfY17NmgPaAig17MPdE2EgdG9ZTnZ-mapQluV-5PJCscc8aluOKKpYPyIpKqHA",
+      "role": "reader"
+    },
+    {
+      "email": "edricliu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$f5Ymlv6JxFd-gpJY5QJQIw$nAmZ6T4enuPTHWi9RPRwsD68LBNlYdz_rgFPT2A0VI9ifWIAcSBJ9Alp-esljT3m0B5tvKnf2fsEIPdHDuKMqQ",
+      "role": "reader"
+    },
+    {
+      "email": "eirali@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$0lFF1WCnHD35lRwoO-utpg$8XS0Dpubr5bNh0rfg6JL41Al-mHiESzwFKlvAyyEK5YYygoKx7o6Rxjq6oxe0MIIyGkOS6zPczNULuR7wvTctw",
+      "role": "reader"
+    },
+    {
+      "email": "emilyzhou@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$sVOnGl1T5j2jGk91i-mYEg$sqGcfWsDDYjoLYN9cRZHOutUibjQgmZd_3JY3Wt2l50KSXGY-Cu2RGuvOdXrvw93QBbueXtoYXjT4R_GvqhPBA",
+      "role": "reader"
+    },
+    {
+      "email": "ericjiang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$yA6UuG-BHjLXd2LT3_3RvA$apRe_aczXXG95F0IHi5ICeDLu-HmO0C5M2lr0YN1064xsOJX7A-jbfpSHz9dXI1OOZFh0NlgQX3tZ5aySBkzXA",
+      "role": "reader"
+    },
+    {
+      "email": "ericvo@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$74A3UNaADcyTLO1rgbtIUg$380TZT4bIIwR4uRM1pdgRWzjWWe5MIe6bbUv21PBAB4QyEbgVpv3p5PbdhCyeQXBqolaUoqv-qYh23qS5zPesQ",
+      "role": "reader"
+    },
+    {
+      "email": "estherlin@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$KgEkPyv5rA50mJH0PSimyA$LI-oQGjLEcXegME_M8e1jnaTSfPMGRhb0yFth43ZrTGrjRqu3e_xJCxQUExBWhG3vYLk8o5j38s_e_INDq6FrQ",
+      "role": "reader"
+    },
+    {
+      "email": "foxwu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$nUGCp38g5K6bIMnTGdlKmA$xyp8aGtAvj9_h5SFBNzIKktY9gE9-0XT6E-SKZsDr78XdoOILqz7k_2GvPmOMJs8Olx-ZjaW4XdPsVV8HoT5dQ",
+      "role": "reader"
+    },
+    {
+      "email": "garagong@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$lUOqpVy3QmdYdK2GQQ0UDw$uZXDcxrNZjFNis6KBtEId9oOsPHa9xLZLL8kHfujKUy-wB_mJj6h_NAZBy2mDE7mwMgGvNEU0i3Aq-aRpPqRPg",
+      "role": "reader"
+    },
+    {
+      "email": "godotsong@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$o1u6hBKgG5co6ER1h8d1zA$tXgidIlLnxWVWNEBLfdanU857TvqKjsdDhetutJYS6EhL_LwZMpI8fEhU0QPEdt7uExiy49b6X49wL7ZubBDpg",
+      "role": "reader"
+    },
+    {
+      "email": "gunterchen@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$INNt4Gelis85bfKkL4M6uw$B0QUfPwZ_3on6GgPHf-CaVlYbJNFIp28oBqtZnnB78xDEFU8I4mhi8e-OTHZZfjejqXjvS4khTH0wQWiIItIDA",
+      "role": "reader"
+    },
+    {
+      "email": "hannahzhang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$7dASnuLYHib-iR5ulo2Hog$6Zg-5mOaj7rY0G5V59rEcs3I_SbuUse8phL8Wh3baxtSXRo42KF_1P6H_SUi0lC1B-ofqf53hbeEtjfFIDyMSA",
+      "role": "reader"
+    },
+    {
+      "email": "hedyxie@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$-Kl5QKI3TEKq3EKxGPpJew$r4f-TNo4DOzI9r0414Uxu4_xxRry_wJcKJ1nUz_3CZ-6iVWCo6NC-NvkTyIOUVm_D1jSp0nIk2g7IYDe8RVsLg",
+      "role": "reader"
+    },
+    {
+      "email": "helenmou@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$gtvdL8giQu4j07seKew9TA$yctt4Goz3TgrHxxcXGE8NbL5Cfv5Y6CIMSSa8ZqCxZ_oFtZRDrADWnW_oL0Tk2Tz6PSHVbwUiOpoMQW1_QL_Tg",
+      "role": "reader"
+    },
+    {
+      "email": "hinshe@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$hKrfFpHGtrVX9pOQB_gCbA$yMdiW-c754llqDTHXg1JRsBU0KcPOM1KI8C4D1u98iyR9dELXURUT1Ns98oZL76KIWUzcdw8Om9VZiAqr2_bzw",
+      "role": "reader"
+    },
+    {
+      "email": "husnawazir@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$JB29PTmGp_CVNWoEUXoa_A$eynNuwRBNLeDjYKUhGQSG-GEVcZd95mxBYKKtEQrcDzweuNbEtV6nNyrKzQbRrQBeQtNmqlTUp7SAQATpquaWg",
+      "role": "reader"
+    },
+    {
+      "email": "hylasli@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$q1JUCpztyE_03Rw3t87hUQ$wAJ8D0KvPSJNh9fIgb1UGIR4fPZlYezHq7-406gzgsWFUgQzpmCmgm3wmyM90kyf_0cnH8P1cz5qHl-ff0PGrQ",
+      "role": "reader"
+    },
+    {
+      "email": "irenechu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$ii61xLisYGF7C7iApWCgGA$cvpWsaU9bNHRg7F-uQTyyQLLdgXwbrZ_80h6hxc5IHhzkimVRS65bAdVPcytMJuoSOugDpL5dfUSpgSVc35KMQ",
+      "role": "reader"
+    },
+    {
+      "email": "irfanhadi@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$yJQJObLRmb7I8SJEX9yBjQ$Tn48frIgwJyVQ_GK4wtFg6JogFe8Yxdr23S7PHTqpXf_a5Btk4UErgfaaMUKsF5X2RkcNDCbmgTFsPE9PFLacQ",
+      "role": "reader"
+    },
+    {
+      "email": "jackchen@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$QWBT0pA-KzAZPBJiGa4z6A$pAmdYhlBilRP_CNOrgF2CiC0FLIBEAEoE8OJreHFYm0ZtXDEZrmKroKWIlK2SBeEMgTdAneCYy5S117ehVZCzg",
+      "role": "reader"
+    },
+    {
+      "email": "jasminezhu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$rfNz9rA_h6YQyt7lDJxkHw$hH7oPGvL7YS41rCauODuldEPFnZaPdJColHqBcWi8dNMCGn4-ZfYdIorQ0wvl_5pZgZkCcb_EdK2MhPq2ayNew",
+      "role": "reader"
+    },
+    {
+      "email": "jessicacung@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$_83vAJFIV5CvsR1qJEPM8A$V03-asrxjNJvC8S7jJjwvRsycU_8JYejBxXlf7sMG__CKJRXNqQmvOl0HjNkIY_4odXiGLpD81T64ZBPOqKHfQ",
+      "role": "reader"
+    },
+    {
+      "email": "joeyzhang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$pdbBrTNb0V4Xp92UlPoOTg$LJzZgDIeP4oCNuJHz1cyW-UOKkXkNxggBoRCwzgOz_b-oaFIqqevfTUdgpS8hFV6SMGwlTqq0BmpsR2tdtxVcA",
+      "role": "reader"
+    },
+    {
+      "email": "joycetong@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$K-A1ryADbcTCPuHE0X8nGw$3VmHxD1s-l8lrLHqJLy4yzYnKnK9rLM8hOeYC_gfLZxFuL2H106W6K99dsLe8-tBDDt5s1zb4O2KteAI44o8vQ",
+      "role": "reader"
+    },
+    {
+      "email": "julesli@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$1YhwYugvo_gwBBpBXGPh_Q$VRWDGZgXpZWHTRmLmf4CVygOedKZYsJk-ImA9oaggsfzAW7d0t_aQKV4ZU__O5evDaUEVKVEBnXgcnU-bbniiA",
+      "role": "reader"
+    },
+    {
+      "email": "kianke@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$dQQ6j5AxR6-9lZHp0BoZJQ$9OwOZHSchrXzcxBYlHqxnu14zGh5Y4Wur3YX78CNC46wsHQPN3PYBD65_1_q_o8lWvCHnJHKzGPYhjMgxejcUg",
+      "role": "reader"
+    },
+    {
+      "email": "lesliefeng@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$ly2Cs_JFjKNhYsTk-AeBQw$b5424ZnqukzQH5OjivVS9tLBamHD8G9fis5CgOj4fPjD0ltTPTrJRz7jWaTmGjqSJGW1TeSdrCtRelsqFssc_w",
+      "role": "reader"
+    },
+    {
+      "email": "levvladykin@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$ukHYxk_0mPsqgesWq4DBKg$H0TLjBBYQ1I0OsZ9ESCdUMDRZmQqbT3H3lik7yRbKko4B4SW6_rTNUmsP2eJuBMVhDseETMgyAkso_tQCG2m9w",
+      "role": "reader"
+    },
+    {
+      "email": "linuslim@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$MGofQPtvKHJm-xIhXgEy4Q$sWQPWWDZCSqdyLVTiojNaAWl5tNkhs0_zbQFUQyLFvEgTvn6vL5x8AaLgytQtoxiWHoJSMif-EiPagUwe_GIkA",
+      "role": "reader"
+    },
+    {
+      "email": "loyallu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$SBB9L0YO07ErcniER61qPw$YUOVlUbFVUCiP0ZaiXeYcQLZe3SRDexAXfpu5oXQJdl5DJt1vDy7Xp7KEEBgkG0Y2iQ3lS1c5P4LA4KVvRVlpQ",
+      "role": "reader"
+    },
+    {
+      "email": "lynchang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$fijtl2Hy5s7HiDjnmb_8eg$A6FuQBazfG6jg0S7UTWThTfYN5HoKheeGri3oSl_IRxW3j6k36HjuHDWU1-4OUVKVV-ypVvWFjC5SDLWfg48Gw",
+      "role": "reader"
+    },
+    {
+      "email": "miazhao@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$VO4YYfBR9P9MyVcLCQvMEA$8wXj1iqm7mlv1droijivtbBCI0OFgmsMQGNYhzdH2jWWwe_eolFP9QxS91xQhOf7bYOiu0WrQCavwId38zQK1A",
+      "role": "reader"
+    },
+    {
+      "email": "mikenguyen@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$AGDCQbYkoEgfN00xTGkVEA$kWpAGmn6qDtXSLaC8x9f7B8sI7En0f6HZF5s4YQL7f_aHJTUHrH_DxdzMeo1QsELjJ6B-YdlrhMnT-OEBuDovg",
+      "role": "reader"
+    },
+    {
+      "email": "mileswu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$IqvVh0NZimzV1N6gAiXwlA$NrOdKA8DjAHSTp-3n14br012uYNagqmukyJgRynPSc2IhqJ3f_5H3D8VxmRMo47O_cQzGk83H-aRKSUG-MfOHQ",
+      "role": "reader"
+    },
+    {
+      "email": "najibmansor@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$i_YS3l-BctuV_lpcTYsCJg$iMyXGtYAJtALYKTL1vWngnQ7OTX4umwKRc5KBIOQhg2B2_RumPXnYWDQ0LBlXngQb404PRjzsx0U4YHvsH0DRg",
+      "role": "reader"
+    },
+    {
+      "email": "nancywang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$oX7tYSywp6kJ9ufHgObt3Q$qOX1TLIsGUOE3u-urWuWAXuRnYWR-pJ4E37CWkIhM6qqpuGV8ej3Jvn1kAsk2wpsmLf-OkRslHGCMTtpnraG4w",
+      "role": "reader"
+    },
+    {
+      "email": "ninama@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$eBdVlRg_V6vIJhm__g9sDw$Rf-y3y7127cFVwERE5YCkOqLOd1IgdGpyWNEptY6M8K6WooZGXZ2PftQcEDHTk42PZdg_M3Ds7oXQjGTacvAbA",
+      "role": "reader"
+    },
+    {
+      "email": "peterbui@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$Qcw4qeqsc_ktnThs3ljCRA$uDkx6Mtd3j8qWdD8jDlb19HKijkzTXtkZhMLfmplcw8c7TfRRi0w6ZjcdhIH4xVTUmt2EGAC-cj-deW87U_auQ",
+      "role": "reader"
+    },
+    {
+      "email": "pinkycao@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$KHVbidMHruZESFNgCzPZdQ$gANDOuDMW6SFhQIr7g1PnbJBQvovR1Wmd0I0rUQ84LxGHlvcoiND9rWhDtZk6PC59Hzf0ahH7hk7sUpWmMMNwA",
+      "role": "reader"
+    },
+    {
+      "email": "rainliu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$Nex1bJQBGX-y3WusQzhUEw$UglP1M698oyPL0aymuhr2ulL1Kq_1s2PTUHaoe1ADH6xTrJaYU9S_2qLZUnx9JUXpLVLru_PyjFsyJ0G-gZ56A",
+      "role": "reader"
+    },
+    {
+      "email": "rayfang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$VU9mRlAF3DLTa4I_iNxyOg$cxemxQ2vbCOIreHEEjopIJgw-Bgr03SOBUQhJxfNBFaUSktNh3UlNM2XfHq_GVAHBsuuYYK077uJlRj1A-t9ew",
+      "role": "reader"
+    },
+    {
+      "email": "raynacai@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$CTfz2A1JT813OjwMplRhrA$kgqvuh131407XYp-pMOYJT3aQ5SiwyyyD9zhYg1tdif0QnmHyIdXaiL8JD8eqKzLBTL71n9ryc_4hRQXcnRmRQ",
+      "role": "reader"
+    },
+    {
+      "email": "richardyee@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$FDEc645zXT-bkq4Nm_r20w$zv5arR76ETvk2hj7ruGRmacAY8UoeAZUsT4ZCBZy1Q3MOHhoyU8Gwrg0y5RGS2zc_EJkmo-tuACIiTVdSHkC7Q",
+      "role": "reader"
+    },
+    {
+      "email": "samhuang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$d22jnYsfZBsLsyXlt73hAQ$tYB7vSQe6EfhJPEuuRRfSgJhy8Gp43zXJKVdu1JlBfSUQgQBVNvgBys2bwVkjtd9g9xSN1gH4FV8I7Kya10vUQ",
+      "role": "reader"
+    },
+    {
+      "email": "sharonmai@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$1jYTW-xOh0bxigFMeg3LRQ$V8jdQe4QukDkegdKmr5djhEUO2vOCQ6syLDIvJ9t17unrMZAk2kerWIihHpEh6ymEa-Kj1dIFlmlVJhNPLvVWg",
+      "role": "reader"
+    },
+    {
+      "email": "stevelee@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$DlCwsEFk01TXoGeSWdIqpw$qojBJh2S_jw3LxVfxaKlqNQ9SpIUwqSHLoTRP74vGji4B2zrxXll3OhjNARV-cr-oiqwBappXvHJ930BYGfoIA",
+      "role": "reader"
+    },
+    {
+      "email": "steveluo@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$nhETQXuIGMA1hHPvtVFCIQ$zCpFsw4m0HZJGUDLkJsJRrS_VbeGE9DmbMf0gEMIGBRSR54NHXEfRdGQEom3DgRH2tK6bs__3qN5QfovqAI6Pg",
+      "role": "reader"
+    },
+    {
+      "email": "susanyang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$ijkJlsXpECsTuVNiMXR_Ag$nw2JqDCasiaYTPVdanjXWmME2KmDSKEznD-nUHYMmWRVzHDNxzOtL1Y6V8cnkg9SVCITFvwBUseRm9OtFD6XrA",
+      "role": "reader"
+    },
+    {
+      "email": "tianatian@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$nhEmb7p5L6ttPzT6q1-mwA$8yRRit7zuT-Pzl5HClVK2MQdrO7tRw9UCGrixACb4FJluPrEbeqi8AvGLN2nYt5EphWoCu9J4KkQtsKo-ZnHKQ",
+      "role": "reader"
+    },
+    {
+      "email": "tracyho@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$2mQL6mZzA6ufzs06RX74zw$PefNwqnYbFI0QlefOb12CmVXts71iLPtRgzpu8DutQPXkLxB0uB9lozxYOBwVKTxE8n-_Vv4EVBmGbZKNO-wpg",
+      "role": "reader"
+    },
+    {
+      "email": "uyenpham@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$4SODYd9l0HDYsIYuzH8PVg$sP8FLRsNuglQjBNpFHvghr9EtRoJuMF6a_PFPFc6WMAAJG-Ka9bBWNgcVFNEIvuLn3pHbZ7O9h0cslPZwYVepA",
+      "role": "reader"
+    },
+    {
+      "email": "victorhew@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$kd25yoRnnxDRsV3w-A4K6A$vxWskBAKAFBMAY5uWXH8_3HDwOtmUjxZANjqU6Ppf5E5T0GaC5X4ZS7R_Cj2-kfRtdMP-25LEcUZkzNWaQj19w",
+      "role": "reader"
+    },
+    {
+      "email": "vivianloy@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$NBY62Y6MQXsXYXJAurTYhQ$ouH7RXiWXJamRlXMeqfzDpatKscs2hI2opQAONFzFq0TQxuEA-jIg38RPmcQon246l47UQsQP-fB9GzLHBbgsw",
+      "role": "reader"
+    },
+    {
+      "email": "wellsyao@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$4VevGQccN-NT5onyAkos1Q$bRT6rzAwiZ2eloqjwKr5VRnqMYY7P6SuHp4v1bVOO3LO4VP8vsSBg9OVea5TUPDpLsZRaG261DXnGI1JO7Hung",
+      "role": "reader"
+    },
+    {
+      "email": "williamyu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$xSlrfAVK-Y72lQRdUsP5SQ$b4XYqknfCeVIKPzBwZKKZndFB6qqFJwJB2TFqq64Yrfpmr69r2LpHJQP2QpeUbHqNlIF--ZjSCaO_PY1PlrPdA",
+      "role": "reader"
+    },
+    {
+      "email": "xihe@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$3tqxjNz0h5xGuyLeDyITJA$15E8XzFOQYe8c6Nk9V5Jg0UJ86lMsEUx92DWskLapELxFupc2NRgDB8j-TM7H_jPNtYUzpM4_Lk6CuudZYKAxw",
+      "role": "reader"
+    },
+    {
+      "email": "yzhang@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$ZNXA7ocvgRw9MSMUMdFTJw$w9UpY-Sb8kTxKDd7l1_Fs7Y8l6mbJijr48fSEwtlp74T2AicUcUbsIMbl25KcnMIg0d7CMpE1cVlXJscr4t7OA",
+      "role": "reader"
+    },
+    {
+      "email": "yanggu@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$usqNBBXi7uNevHRBFB2n9w$hC-fZLhvnxS8lk9RGkqWILVS7NhZ8OmknyllPQRIUMHrXtBqlX_H0mSQmQ3F-VcucUC_yJwn5cU4tEz5v-9x2A",
+      "role": "reader"
+    },
+    {
+      "email": "zitahui@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$ZO3PZ1zOPXJTU_Lly8uDzg$JsBWVJ_i7VGcbkY3skuCMcKKtaoYRFm7HqiOHu-MtuRX_KKW-kImZnQFjy5kjdZrclLho183l89vIJA-Ru47KQ",
+      "role": "reader"
+    },
+    {
+      "email": "lyn@vtg.com",
+      "passwordHash": "scrypt$16384$8$1$tTjqMN-4NatS_cnl8Vu_iQ$j8Zqf9DCjDwxl11q5vB1n4ZxW1NbwcYhi3gl4mUPlTE2HGPmoPAxje9HGXiuyiRqUs4hYxsrR8oxXeHuracE5g",
+      "role": "reader"
+    }
+  ]
+}

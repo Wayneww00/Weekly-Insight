@@ -77,6 +77,7 @@ function startApp(user) {
   state.user = user;
   els.loginScreen.hidden = true;
   els.appShell.hidden = false;
+  els.openUpload.hidden = !isAdminUser();
   clearStoredFilesOnce();
   els.issueDate.value = formatLocalDate(new Date());
   state.selectedIssueId = latestIssue()?.id || state.issues[0]?.id || null;
@@ -425,6 +426,10 @@ function selectedIssue() {
   return state.issues.find((issue) => issue.id === state.selectedIssueId) || latestIssue();
 }
 
+function isAdminUser() {
+  return state.user?.role === "admin";
+}
+
 function getFilteredIssues() {
   let result = state.issues;
 
@@ -556,18 +561,23 @@ function isHistoryMonthCollapsed(monthKey, groupIssues) {
 function renderNavItem(issue) {
   const selected = selectedIssue()?.id === issue.id ? "active" : "";
   const status = getIssuePreviewStatus(issue);
-  return `
-    <div class="nav-item ${selected}">
-      <button class="nav-open" type="button" data-issue-id="${issue.id}">
-        <strong>${escapeHtml(getIssueDisplayTitle(issue))}</strong>
-        <small>${escapeHtml(getIssueDisplayMeta(issue))}</small>
-        <span class="nav-status ${status.className}">${escapeHtml(status.label)}</span>
-      </button>
+  const deleteAction = isAdminUser()
+    ? `
       <button class="nav-delete" type="button" data-delete-issue-id="${issue.id}" aria-label="删除 ${escapeHtml(getIssueDisplayTitle(issue))}">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <path d="M2 3.5h10M5.5 1.5h3M5 5.5v5M9 5.5v5M3.5 3.5l.5 8.5a1 1 0 0 0 1 .95h4a1 1 0 0 0 1-.95l.5-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
+    `
+    : "";
+  return `
+    <div class="nav-item ${selected} ${isAdminUser() ? "" : "read-only"}">
+      <button class="nav-open" type="button" data-issue-id="${issue.id}">
+        <strong>${escapeHtml(getIssueDisplayTitle(issue))}</strong>
+        <small>${escapeHtml(getIssueDisplayMeta(issue))}</small>
+        <span class="nav-status ${status.className}">${escapeHtml(status.label)}</span>
+      </button>
+      ${deleteAction}
     </div>
   `;
 }
@@ -760,6 +770,13 @@ function renderPreview(issue, file, fileUrl = "") {
   }
 
   if (issue.status === "failed") {
+    const retryAction = isAdminUser()
+      ? `
+        <button class="btn btn-primary retry-preview" type="button" data-retry-preview="${escapeHtml(issue.id || "")}">
+          重新生成预览
+        </button>
+      `
+      : "";
     return `
       <div class="preview-shell">
         <div class="preview-stage">
@@ -773,9 +790,7 @@ function renderPreview(issue, file, fileUrl = "") {
             </div>
             <h3>预览生成失败</h3>
             <p>${escapeHtml(issue.conversionMessage || "当前文件暂时无法生成在线预览，请下载原文件查看。")}</p>
-            <button class="btn btn-primary retry-preview" type="button" data-retry-preview="${escapeHtml(issue.id || "")}">
-              重新生成预览
-            </button>
+            ${retryAction}
             <div class="file-meta">
               <span>${escapeHtml(issue.fileName)}</span>
               <span>${fileSizeText}</span>
@@ -1125,6 +1140,7 @@ async function handleUpload(file) {
 }
 
 async function deleteIssue(issueId) {
+  if (!isAdminUser()) return;
   const issue = state.issues.find((item) => item.id === issueId);
   if (!issue) return;
 
@@ -1160,7 +1176,7 @@ async function deleteIssue(issueId) {
 }
 
 async function retryIssue(issueId) {
-  if (!issueId || typeof fetch !== "function") return;
+  if (!isAdminUser() || !issueId || typeof fetch !== "function") return;
   const issue = state.issues.find((item) => item.id === issueId);
   if (!issue) return;
 
